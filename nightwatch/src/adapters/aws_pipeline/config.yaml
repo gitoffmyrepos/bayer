@@ -1,0 +1,74 @@
+# ============================================================================
+# Bayer ModelN AWS Pipeline Adapter Configuration
+# ============================================================================
+# This file configures the aws_pipeline adapter for the Bayer ModelN.io
+# pharmaceutical data pipeline running in AWS us-east-1.
+#
+# Auth: boto3 credential chain (IAM role > env vars > ~/.aws/credentials)
+# ============================================================================
+
+application_name: "Bayer ModelN"
+
+aws_region: us-east-1
+
+# AWS Step Functions to monitor
+# Replace ACCOUNT_ID with your actual AWS account ID
+step_function_arns:
+  - arn:aws:states:us-east-1:${AWS_ACCOUNT_ID}:stateMachine:bay-modeln-jobs-workflow
+  - arn:aws:states:us-east-1:${AWS_ACCOUNT_ID}:stateMachine:bay-modeln-outbound-jobs-wrkflw
+
+# AWS Glue jobs to monitor
+glue_jobs:
+  - bay-modeln-raw-job-us-east-1
+  - bay-modeln-enriched-job-us-east-1
+  - bay-modeln-rodb-job-us-east-1
+  - bay-modeln-s3-to-sftp-pythonshell-job-us-east-1
+
+# S3 buckets and prefixes to monitor
+# Format: { "bucket-name": ["prefix1/", "prefix2/"] }
+s3_buckets:
+  s3-landing-us-east-1:
+    - USRMT/Inbound/Source/
+    - USRMT/Outbound/Source/
+  s3-raw-bucket-us-east-1:
+    - ""
+  s3-enriched-us-east-1:
+    - ""
+
+# Lambda functions to monitor
+lambda_functions:
+  - bay-modeln-audit-lambda
+  - bay-modeln-transform-lambda
+
+# DynamoDB tables to monitor
+dynamodb_tables:
+  - bay-modeln-jobs-table
+  - bay-modeln-config-table
+
+# Transfer Family SFTP server IDs to monitor
+sftp_server_ids:
+  - ${SFTP_SERVER_ID}  # Set via env var or replace with actual ID
+
+# CloudWatch log groups for error log collection
+cloudwatch_log_groups:
+  - /aws/glue/jobs/bay-modeln-raw-job-us-east-1
+  - /aws/glue/jobs/bay-modeln-enriched-job-us-east-1
+  - /aws/states/bay-modeln-executions
+  - /aws/lambda/bay-modeln-audit-lambda
+
+# Health check thresholds
+thresholds:
+  # Maximum age (hours) before S3 landing bucket triggers a warning
+  max_s3_age_hours: 2
+
+  # Number of consecutive Glue failures before triggering a FAIL (vs WARN)
+  max_consecutive_glue_failures: 2
+
+  # Lambda error rate threshold (0.05 = 5%)
+  max_lambda_error_rate: 0.05
+
+  # Maximum DynamoDB throttle rate (0.05 = 5%)
+  max_dynamodb_throttle_rate: 0.05
+
+  # Minimum outbound SFTP files per day (partner delivery check)
+  min_sftp_files_per_day: 1

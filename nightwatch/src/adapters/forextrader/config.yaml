@@ -1,0 +1,62 @@
+# ============================================================================
+# ForexTrader Platform Adapter Configuration
+# ============================================================================
+# Monitors the ForexTrader autonomous FX trading platform on Kubernetes.
+#
+# Auth:
+#   - Kubernetes: kubeconfig at ~/.kube/config or in-cluster service account
+#   - OANDA: OANDA_API_KEY env var
+#   - Jenkins: JENKINS_API_TOKEN env var
+# ============================================================================
+
+# Kubernetes
+k8s_namespace: prod-forex
+# kubeconfig_path: /path/to/kubeconfig  # Optional: defaults to ~/.kube/config
+
+# Critical deployments to check for replica readiness
+critical_deployments:
+  - forextrader-ml-trainer
+  - forextrader-rl-agents
+  - forextrader-api-gateway
+  - forextrader-data-ingestion
+  - forextrader-prediction-engine
+  - forextrader-risk-manager
+
+# OANDA broker API
+oanda_api_url: https://api-fxtrade.oanda.com  # Use https://api-fxpractice.oanda.com for demo
+oanda_account_id: ${OANDA_ACCOUNT_ID}
+oanda_api_key: ${OANDA_API_KEY}
+
+# API health endpoints
+health_endpoints:
+  - name: ForexTrader API Gateway
+    url: https://forex.strategybase.io/api/health
+    expected_status: 200
+  - name: ForexTrader Frontend
+    url: https://forex.strategybase.io
+    expected_status: 200
+
+# Jenkins CI (optional — tracks build health)
+jenkins_url: https://jenkins.strategybase.io
+jenkins_username: strategybase
+jenkins_api_token: ${JENKINS_API_TOKEN}
+jenkins_jobs:
+  - ForexTrader/tier-0-ml-framework-base/master
+  - ForexTrader/forextrader-api/master
+
+# Health check thresholds
+thresholds:
+  # Minimum number of running pods before alerting
+  min_pods_running: 10
+
+  # Pod restart count threshold for crash-loop detection
+  max_pod_restarts: 5
+
+  # Minimum OANDA balance before warning (demo account: $90,000)
+  min_balance: 90000
+
+  # Maximum drawdown percentage before alerting
+  max_drawdown_pct: 10.0
+
+  # Maximum API response time in milliseconds
+  max_api_response_ms: 2000

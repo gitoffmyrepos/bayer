@@ -236,6 +236,44 @@ variable "monitored_account_ids" {
 }
 
 # -----------------------------------------------------------------------------
+# LLM Provider Configuration (Nightwatch v2 — cloud-agnostic AI)
+# -----------------------------------------------------------------------------
+variable "llm_provider" {
+  description = "LLM provider for AI analysis: anthropic | openai | deepseek | ollama"
+  type        = string
+  default     = "anthropic"
+  validation {
+    condition     = contains(["anthropic", "openai", "deepseek", "ollama"], var.llm_provider)
+    error_message = "llm_provider must be one of: anthropic, openai, deepseek, ollama"
+  }
+}
+
+variable "llm_model" {
+  description = "LLM model name (provider-specific). Defaults vary by provider."
+  type        = string
+  default     = "claude-3-haiku-20240307"
+  # anthropic: claude-3-haiku-20240307, claude-3-5-sonnet-20241022
+  # openai: gpt-4o-mini, gpt-4o
+  # deepseek: deepseek-chat (cheapest option)
+  # ollama: qwen3:14b, llama3, mistral (local, no API cost)
+}
+
+variable "llm_api_key_ssm_path" {
+  description = "AWS SSM Parameter Store path for the LLM API key (SecureString)"
+  type        = string
+  default     = "/nightwatch/llm/api_key"
+  # Store your API key: aws ssm put-parameter --name /nightwatch/llm/api_key --type SecureString --value sk-ant-...
+}
+
+variable "ollama_base_url" {
+  description = "Ollama base URL (only used when llm_provider = ollama)"
+  type        = string
+  default     = ""
+  # Example: "http://ollama.my-cluster.local:11434"
+  # Use this to run fully local/private AI with no API costs
+}
+
+# -----------------------------------------------------------------------------
 # Alerting
 # -----------------------------------------------------------------------------
 variable "slack_webhook_url" {
