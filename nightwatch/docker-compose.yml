@@ -1,0 +1,28 @@
+version: '3.8'
+
+services:
+  nightwatch-api:
+    build: .
+    ports:
+      - "8080:8080"
+    environment:
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - LLM_PROVIDER=${LLM_PROVIDER:-anthropic}
+      - NIGHTWATCH_CONFIG=/app/config/nightwatch.yaml
+    volumes:
+      - ./config:/app/config
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  nightwatch-ui:
+    build: ./frontend
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://nightwatch-api:8080
+    depends_on:
+      nightwatch-api:
+        condition: service_healthy
