@@ -1,0 +1,199 @@
+---
+# AWS credentials secret — populate from your secrets manager / CI before deploying
+apiVersion: v1
+kind: Secret
+metadata:
+  name: aws-pipeline-collector-secrets
+  namespace: nightwatch
+  labels:
+    app.kubernetes.io/name: aws-pipeline-collector
+    app.kubernetes.io/part-of: nightwatch-platform
+type: Opaque
+stringData:
+  # REQUIRED: Replace with actual Bayer AWS credentials or use IAM role (recommended)
+  AWS_ACCESS_KEY_ID: "REPLACE_WITH_AWS_ACCESS_KEY_ID"
+  AWS_SECRET_ACCESS_KEY: "REPLACE_WITH_AWS_SECRET_ACCESS_KEY"
+  # Optional: for assumed role sessions
+  # AWS_SESSION_TOKEN: ""
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: aws-pipeline-collector-config
+  namespace: nightwatch
+  labels:
+    app.kubernetes.io/name: aws-pipeline-collector
+    app.kubernetes.io/part-of: nightwatch-platform
+data:
+  AWS_REGION: "us-east-1"
+  SCRAPE_INTERVAL_SECONDS: "30"
+  PORT: "8080"
+
+  # Step Function ARNs — replace ACCOUNT with actual AWS account ID
+  STEP_FUNCTION_ARNS: |
+    arn:aws:states:us-east-1:BAYER_ACCOUNT_ID:stateMachine:bay-modeln-jobs-workflow,arn:aws:states:us-east-1:BAYER_ACCOUNT_ID:stateMachine:bay-modeln-outbound-jobs-wrkflw
+
+  # Glue job names
+  GLUE_JOB_NAMES: |
+    bay-modeln-raw-job-us-east-1,bay-modeln-enriched-job-us-east-1,bay-modeln-rodb-job-us-east-1,bay-modeln-s3-to-sftp-pythonshell-job-us-east-1
+
+  # S3 buckets and prefixes to monitor (JSON format)
+  S3_BUCKETS_CONFIG: |
+    {
+      "s3-landing-us-east-1": ["USRMT/Inbound/Source/", "USRMT/Outbound/Source/"],
+      "S3-Raw-bucket-us-east-1": [""],
+      "s3-Enriched-us-east-1": [""]
+    }
+
+  # Transfer Family server ID (optional — leave empty if not needed)
+  TRANSFER_SERVER_ID: ""
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: aws-pipeline-collector
+  namespace: nightwatch
+  labels:
+    app.kubernetes.io/name: aws-pipeline-collector
+    app.kubernetes.io/part-of: nightwatch-platform
+    app: aws-pipeline-collector
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: aws-pipeline-collector
+  template:
+    metadata:
+      labels:
+        app: aws-pipeline-collector
+        app.kubernetes.io/name: aws-pipeline-collector
+        app.kubernetes.io/part-of: nightwatch-platform
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: nightwatch-collector
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: aws-pipeline-collector
+          # Build and push this image to your registry:
+          # docker build -t your-registry/nightwatch-aws-collector:1.0.0 src/collectors/
+          image: harbor.strategybase.io:8083/sb-custom-docker-images/nightwatch-aws-collector:1.0.0
+          imagePullPolicy: Always
+          ports:
+            - name: metrics
+              containerPort: 8080
+              protocol: TCP
+          env:
+            # From ConfigMap
+            - name: AWS_REGION
+              valueFrom:
+                configMapKeyRef:
+                  name: aws-pipeline-collector-config
+                  key: AWS_REGION
+            - name: SCRAPE_INTERVAL_SECONDS
+              valueFrom:
+                configMapKeyRef:
+                  name: aws-pipeline-collector-config
+                  key: SCRAPE_INTERVAL_SECONDS
+            - name: PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: aws-pipeline-collector-config
+                  key: PORT
+            - name: STEP_FUNCTION_ARNS
+              valueFrom:
+                configMapKeyRef:
+                  name: aws-pipeline-collector-config
+                  key: STEP_FUNCTION_ARNS
+            - name: GLUE_JOB_NAMES
+              valueFrom:
+                configMapKeyRef:
+                  name: aws-pipeline-collector-config
+                  key: GLUE_JOB_NAMES
+            - name: S3_BUCKETS_CONFIG
+              valueFrom:
+                configMapKeyRef:
+                  name: aws-pipeline-collector-config
+                  key: S3_BUCKETS_CONFIG
+            - name: TRANSFER_SERVER_ID
+              valueFrom:
+                configMapKeyRef:
+                  name: aws-pipeline-collector-config
+                  key: TRANSFER_SERVER_ID
+            # From Secret (AWS credentials)
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: aws-pipeline-collector-secrets
+                  key: AWS_ACCESS_KEY_ID
+                  optional: false
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: aws-pipeline-collector-secrets
+                  key: AWS_SECRET_ACCESS_KEY
+                  optional: false
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            failureThreshold: 3
+            timeoutSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 15
+            failureThreshold: 5
+            timeoutSeconds: 10
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: aws-pipeline-collector
+  namespace: nightwatch
+  labels:
+    app.kubernetes.io/name: aws-pipeline-collector
+    app.kubernetes.io/part-of: nightwatch-platform
+    app: aws-pipeline-collector
+spec:
+  selector:
+    app: aws-pipeline-collector
+  ports:
+    - name: metrics
+      port: 8080
+      targetPort: 8080
+      protocol: TCP
+  type: ClusterIP

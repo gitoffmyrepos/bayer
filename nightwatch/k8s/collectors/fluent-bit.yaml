@@ -1,0 +1,290 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: fluent-bit-config
+  namespace: nightwatch
+  labels:
+    app.kubernetes.io/name: fluent-bit
+    app.kubernetes.io/part-of: nightwatch-platform
+data:
+  fluent-bit.conf: |
+    [SERVICE]
+        Flush         5
+        Daemon        Off
+        Log_Level     info
+        Parsers_File  parsers.conf
+        HTTP_Server   On
+        HTTP_Listen   0.0.0.0
+        HTTP_Port     2020
+        storage.path  /var/log/flb-storage/
+        storage.sync  normal
+        storage.checksum off
+        storage.max_chunks_up 128
+
+    # Tail all container logs from the node
+    [INPUT]
+        Name              tail
+        Tag               kube.*
+        Path              /var/log/containers/*.log
+        Parser            docker
+        DB                /var/log/flb_kube.db
+        Mem_Buf_Limit     10MB
+        Skip_Long_Lines   On
+        Refresh_Interval  10
+        Rotate_Wait       30
+        storage.type      filesystem
+
+    # Kubernetes metadata enrichment
+    [FILTER]
+        Name                kubernetes
+        Match               kube.*
+        Kube_URL            https://kubernetes.default.svc:443
+        Kube_CA_File        /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+        Kube_Token_File     /var/run/secrets/kubernetes.io/serviceaccount/token
+        Kube_Tag_Prefix     kube.var.log.containers.
+        Merge_Log           On
+        Merge_Log_Key       log_processed
+        K8S-Logging.Parser  On
+        K8S-Logging.Exclude Off
+        Labels              On
+        Annotations         On
+        Buffer_Size         0
+
+    # Parse JSON logs if present
+    [FILTER]
+        Name          parser
+        Match         kube.*
+        Key_Name      log
+        Parser        json
+        Reserve_Data  On
+        Preserve_Key  On
+
+    # Add nightwatch metadata
+    [FILTER]
+        Name          record_modifier
+        Match         kube.*
+        Record        nightwatch.platform nightwatch
+        Record        nightwatch.pipeline bayer-modeln
+        Record        nightwatch.environment production
+
+    # Only keep logs from relevant namespaces (filter noise)
+    [FILTER]
+        Name    grep
+        Match   kube.*
+        Exclude $kubernetes['namespace_name'] ^kube-system$
+
+    # Deduplicate repeated lines within 5s window
+    [FILTER]
+        Name         throttle
+        Match        kube.*
+        Rate         1000
+        Window       5
+        Interval     1s
+
+    # Output to OpenSearch
+    [OUTPUT]
+        Name            opensearch
+        Match           kube.*
+        Host            opensearch
+        Port            9200
+        Index           nightwatch-logs
+        Type            _doc
+        Logstash_Format On
+        Logstash_Prefix nightwatch-logs
+        Logstash_DateFormat %Y.%m.%d
+        Include_Tag_Key On
+        Tag_Key         fluentbit_tag
+        Time_Key        @timestamp
+        Retry_Limit     5
+        Buffer_Size     10MB
+        Trace_Output    Off
+        Generate_ID     On
+        Replace_Dots    On
+        HTTP_User       admin
+        HTTP_Passwd     ${OPENSEARCH_PASSWORD}
+
+  parsers.conf: |
+    [PARSER]
+        Name        docker
+        Format      json
+        Time_Key    time
+        Time_Format %Y-%m-%dT%H:%M:%S.%L
+        Time_Keep   On
+
+    [PARSER]
+        Name        json
+        Format      json
+        Time_Key    time
+        Time_Format %d/%b/%Y:%H:%M:%S %z
+        Time_Keep   On
+
+    [PARSER]
+        Name        syslog
+        Format      regex
+        Regex       ^\<(?<pri>[0-9]+)\>(?<time>[^ ]* {1,2}[^ ]* [^ ]*) (?<host>[^ ]*) (?<ident>[a-zA-Z0-9_\/\.\-]*)(?:\[(?<pid>[0-9]+)\])?(?:[^\:]*\:)? *(?<message>.*)$
+        Time_Key    time
+        Time_Format %b %d %H:%M:%S
+
+    [PARSER]
+        Name        glue_log
+        Format      regex
+        Regex       (?<timestamp>[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}) (?<level>[A-Z]+) (?<logger>[^ ]+) (?<message>.*)
+        Time_Key    timestamp
+        Time_Format %Y-%m-%dT%H:%M:%S
+
+    [PARSER]
+        Name        lambda_log
+        Format      json
+        Time_Key    timestamp
+        Time_Format %Y-%m-%dT%H:%M:%S.%LZ
+
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: fluent-bit
+  namespace: nightwatch
+  labels:
+    app.kubernetes.io/name: fluent-bit
+    app.kubernetes.io/part-of: nightwatch-platform
+    app: fluent-bit
+spec:
+  selector:
+    matchLabels:
+      app: fluent-bit
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+  template:
+    metadata:
+      labels:
+        app: fluent-bit
+        app.kubernetes.io/name: fluent-bit
+        app.kubernetes.io/part-of: nightwatch-platform
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "2020"
+        prometheus.io/path: "/api/v1/metrics/prometheus"
+    spec:
+      serviceAccountName: nightwatch-collector
+      tolerations:
+        # Run on all nodes including control-plane
+        - key: node-role.kubernetes.io/control-plane
+          operator: Exists
+          effect: NoSchedule
+        - key: node-role.kubernetes.io/master
+          operator: Exists
+          effect: NoSchedule
+        - key: dedicated
+          operator: Equal
+          value: kaniko
+          effect: NoSchedule
+        - key: dedicated
+          operator: Equal
+          value: kaniko
+          effect: NoExecute
+      containers:
+        - name: fluent-bit
+          image: cr.fluentbit.io/fluent/fluent-bit:3.0
+          ports:
+            - name: http
+              containerPort: 2020
+              protocol: TCP
+          env:
+            - name: OPENSEARCH_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: opensearch-credentials
+                  key: password
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+          volumeMounts:
+            - name: varlog
+              mountPath: /var/log
+              readOnly: true
+            - name: varlibdockercontainers
+              mountPath: /var/lib/docker/containers
+              readOnly: true
+            - name: fluent-bit-config
+              mountPath: /fluent-bit/etc/
+            - name: flb-storage
+              mountPath: /var/log/flb-storage
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "64Mi"
+            limits:
+              cpu: "200m"
+              memory: "256Mi"
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 2020
+            initialDelaySeconds: 30
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /api/v1/health
+              port: 2020
+            initialDelaySeconds: 10
+            periodSeconds: 10
+      volumes:
+        - name: varlog
+          hostPath:
+            path: /var/log
+        - name: varlibdockercontainers
+          hostPath:
+            path: /var/lib/docker/containers
+        - name: fluent-bit-config
+          configMap:
+            name: fluent-bit-config
+        - name: flb-storage
+          emptyDir: {}
+      terminationGracePeriodSeconds: 30
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: fluent-bit
+  namespace: nightwatch
+  labels:
+    app.kubernetes.io/name: fluent-bit
+    app.kubernetes.io/part-of: nightwatch-platform
+    app: fluent-bit
+spec:
+  selector:
+    app: fluent-bit
+  ports:
+    - name: http
+      port: 2020
+      targetPort: 2020
+      protocol: TCP
+  type: ClusterIP
+
+---
+# OpenSearch credentials secret (populate before deploying)
+apiVersion: v1
+kind: Secret
+metadata:
+  name: opensearch-credentials
+  namespace: nightwatch
+  labels:
+    app.kubernetes.io/part-of: nightwatch-platform
+type: Opaque
+stringData:
+  # Change these before deploying!
+  username: "admin"
+  password: "NightWatch2026!"

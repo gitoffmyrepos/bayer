@@ -1,0 +1,314 @@
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: grafana-admin-credentials
+  namespace: nightwatch
+  labels:
+    app.kubernetes.io/name: grafana
+    app.kubernetes.io/part-of: nightwatch-platform
+type: Opaque
+stringData:
+  # Change before deploying!
+  admin-user: "admin"
+  admin-password: "NightWatch2026!"
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-datasources
+  namespace: nightwatch
+  labels:
+    app.kubernetes.io/name: grafana
+    app.kubernetes.io/part-of: nightwatch-platform
+data:
+  datasources.yaml: |
+    apiVersion: 1
+    datasources:
+      # VictoriaMetrics as Prometheus-compatible datasource
+      - name: VictoriaMetrics
+        type: prometheus
+        uid: victoriametrics
+        url: http://victoriametrics:8428
+        access: proxy
+        isDefault: true
+        editable: true
+        jsonData:
+          httpMethod: POST
+          prometheusType: Prometheus
+          prometheusVersion: 2.40.0
+          timeInterval: "30s"
+          queryTimeout: "60s"
+          exemplarTraceIdDestinations:
+            - name: traceID
+              datasourceUid: jaeger
+
+      # OpenSearch for logs
+      - name: OpenSearch
+        type: grafana-opensearch-datasource
+        uid: opensearch
+        url: http://opensearch:9200
+        access: proxy
+        editable: true
+        jsonData:
+          version: "2.13.0"
+          timeField: "@timestamp"
+          logMessageField: "log"
+          logLevelField: "level"
+          maxConcurrentShardRequests: 5
+          database: "nightwatch-logs-*"
+        secureJsonData:
+          basicAuthPassword: "NightWatch2026!"
+
+      # Prometheus (local 7-day)
+      - name: Prometheus
+        type: prometheus
+        uid: prometheus
+        url: http://prometheus:9090
+        access: proxy
+        editable: true
+        jsonData:
+          httpMethod: GET
+          prometheusType: Prometheus
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboards-config
+  namespace: nightwatch
+  labels:
+    app.kubernetes.io/name: grafana
+    app.kubernetes.io/part-of: nightwatch-platform
+data:
+  dashboard-providers.yaml: |
+    apiVersion: 1
+    providers:
+      - name: 'nightwatch-dashboards'
+        orgId: 1
+        folder: 'Nightwatch — Bayer ModelN'
+        type: file
+        disableDeletion: false
+        editable: true
+        updateIntervalSeconds: 30
+        allowUiUpdates: true
+        options:
+          path: /var/lib/grafana/dashboards
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-ini
+  namespace: nightwatch
+  labels:
+    app.kubernetes.io/name: grafana
+    app.kubernetes.io/part-of: nightwatch-platform
+data:
+  grafana.ini: |
+    [analytics]
+    check_for_updates = false
+    reporting_enabled = false
+
+    [server]
+    root_url = %(protocol)s://%(domain)s:%(http_port)s/
+    domain = grafana.nightwatch.svc.cluster.local
+
+    [auth]
+    disable_login_form = false
+
+    [auth.anonymous]
+    enabled = false
+
+    [dashboards]
+    default_home_dashboard_path = /var/lib/grafana/dashboards/pipeline-overview.json
+
+    [alerting]
+    enabled = false  # Using AlertManager instead
+
+    [unified_alerting]
+    enabled = false
+
+    [feature_toggles]
+    enable = publicDashboards
+
+    [log]
+    mode = console
+    level = info
+
+    [metrics]
+    enabled = true
+
+    [plugins]
+    allow_loading_unsigned_plugins = grafana-opensearch-datasource
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: grafana-data
+  namespace: nightwatch
+  labels:
+    app.kubernetes.io/name: grafana
+    app.kubernetes.io/part-of: nightwatch-platform
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grafana
+  namespace: nightwatch
+  labels:
+    app.kubernetes.io/name: grafana
+    app.kubernetes.io/part-of: nightwatch-platform
+    app: grafana
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: grafana
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: grafana
+        app.kubernetes.io/name: grafana
+        app.kubernetes.io/part-of: nightwatch-platform
+    spec:
+      securityContext:
+        fsGroup: 472
+        runAsUser: 472
+        runAsNonRoot: true
+      initContainers:
+        - name: init-chown-data
+          image: busybox:1.36
+          command: ["chown", "-R", "472:472", "/var/lib/grafana"]
+          volumeMounts:
+            - name: grafana-data
+              mountPath: /var/lib/grafana
+          securityContext:
+            runAsUser: 0
+        # Install OpenSearch datasource plugin
+        - name: install-plugins
+          image: grafana/grafana:10.4.0
+          command:
+            - sh
+            - -c
+            - |
+              grafana cli --pluginsDir /var/lib/grafana/plugins plugins install grafana-opensearch-datasource
+          env:
+            - name: GF_PATHS_PLUGINS
+              value: /var/lib/grafana/plugins
+          volumeMounts:
+            - name: grafana-data
+              mountPath: /var/lib/grafana
+          securityContext:
+            runAsUser: 0
+      containers:
+        - name: grafana
+          image: grafana/grafana:10.4.0
+          env:
+            - name: GF_SECURITY_ADMIN_USER
+              valueFrom:
+                secretKeyRef:
+                  name: grafana-admin-credentials
+                  key: admin-user
+            - name: GF_SECURITY_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: grafana-admin-credentials
+                  key: admin-password
+            - name: GF_INSTALL_PLUGINS
+              value: "grafana-opensearch-datasource"
+            - name: GF_PATHS_PROVISIONING
+              value: "/etc/grafana/provisioning"
+            - name: GF_PATHS_PLUGINS
+              value: "/var/lib/grafana/plugins"
+          ports:
+            - name: http
+              containerPort: 3000
+              protocol: TCP
+          volumeMounts:
+            - name: grafana-data
+              mountPath: /var/lib/grafana
+            - name: grafana-datasources
+              mountPath: /etc/grafana/provisioning/datasources
+              readOnly: true
+            - name: grafana-dashboards-config
+              mountPath: /etc/grafana/provisioning/dashboards
+              readOnly: true
+            - name: grafana-ini
+              mountPath: /etc/grafana/grafana.ini
+              subPath: grafana.ini
+              readOnly: true
+            - name: grafana-dashboard-files
+              mountPath: /var/lib/grafana/dashboards
+              readOnly: true
+          resources:
+            requests:
+              cpu: "200m"
+              memory: "256Mi"
+            limits:
+              cpu: "1"
+              memory: "1Gi"
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: 3000
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            failureThreshold: 5
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: 3000
+            initialDelaySeconds: 30
+            periodSeconds: 15
+      volumes:
+        - name: grafana-data
+          persistentVolumeClaim:
+            claimName: grafana-data
+        - name: grafana-datasources
+          configMap:
+            name: grafana-datasources
+        - name: grafana-dashboards-config
+          configMap:
+            name: grafana-dashboards-config
+            items:
+              - key: dashboard-providers.yaml
+                path: dashboards.yaml
+        - name: grafana-ini
+          configMap:
+            name: grafana-ini
+        - name: grafana-dashboard-files
+          configMap:
+            name: grafana-dashboard-files
+            optional: true
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: grafana
+  namespace: nightwatch
+  labels:
+    app.kubernetes.io/name: grafana
+    app.kubernetes.io/part-of: nightwatch-platform
+    app: grafana
+spec:
+  selector:
+    app: grafana
+  ports:
+    - name: http
+      port: 3000
+      targetPort: 3000
+      protocol: TCP
+  type: ClusterIP

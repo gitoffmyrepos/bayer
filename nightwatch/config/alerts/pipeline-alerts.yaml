@@ -1,0 +1,486 @@
+# Nightwatch — Bayer ModelN Pipeline Alert Rules
+# These are Prometheus alerting rules loaded into AlertManager
+# Severity: p1 (critical), p2 (high), p3 (medium), p4 (informational)
+# Last Updated: 2026-03-16
+
+---
+groups:
+
+  # ═══════════════════════════════════════════════════════════════════════
+  # P1: CRITICAL — Immediate action required
+  # SLA: 5-minute response time
+  # ═══════════════════════════════════════════════════════════════════════
+  - name: nightwatch-p1-critical
+    interval: 30s
+    rules:
+
+      # P1: Step function has been in FAILED state for > 5 minutes
+      - alert: StepFunctionFailed
+        expr: |
+          nightwatch_stepfunction_execution_status{status="FAILED"} > 0
+        for: 5m
+        labels:
+          severity: p1
+          pipeline: bayer-modeln
+          team: platform
+          auto_remediate: "true"
+          playbook: stepfunction-restart
+        annotations:
+          summary: "Step Function {{ $labels.state_machine }} FAILED ({{ $labels.execution_name }})"
+          description: |
+            Step Function execution has been in FAILED state for > 5 minutes.
+            State Machine: {{ $labels.state_machine }}
+            Execution: {{ $labels.execution_name }}
+            This may affect: Inbound file processing, Glue job triggers, data delivery to downstream systems.
+          runbook: "https://wiki/nightwatch/runbooks/stepfunction-failed"
+          dashboard: "https://grafana/d/nightwatch-stepfunctions"
+
+      # P1: Step function TIMED_OUT
+      - alert: StepFunctionTimedOut
+        expr: |
+          nightwatch_stepfunction_execution_status{status="TIMED_OUT"} > 0
+        for: 1m
+        labels:
+          severity: p1
+          pipeline: bayer-modeln
+          team: platform
+        annotations:
+          summary: "Step Function {{ $labels.state_machine }} TIMED OUT"
+          description: |
+            Execution {{ $labels.execution_name }} has timed out.
+            Check if Glue jobs are hanging or if there is a network issue.
+          runbook: "https://wiki/nightwatch/runbooks/stepfunction-timeout"
+
+      # P1: No S3 objects landed in landing bucket for > 2 hours (expected window)
+      # Business context: Partners send files on a schedule — missing files = missed pipeline run
+      - alert: S3LandingNoNewObjects
+        expr: |
+          (
+            time() - nightwatch_s3_last_modified_age_seconds{bucket=~".*landing.*"}
+          ) > 7200
+        for: 5m
+        labels:
+          severity: p1
+          pipeline: bayer-modeln
+          team: platform
+          component: s3-landing
+        annotations:
+          summary: "S3 landing bucket {{ $labels.bucket }} has no new objects for 2+ hours"
+          description: |
+            Bucket: {{ $labels.bucket }}
+            Prefix: {{ $labels.prefix }}
+            No objects have landed in the expected 2-hour ingest window.
+            Possible causes: SFTP transfer from McKesson/AXWAY failed, Transfer Family issue,
+            partner-side issue, or EventBridge rule not triggering.
+          runbook: "https://wiki/nightwatch/runbooks/s3-missing-files"
+
+      # P1: Outbound SFTP delivery failed — McKesson/AXWAY SLA breach
+      - alert: OutboundSFTPDeliveryFailed
+        expr: |
+          (
+            sum(increase(nightwatch_sftp_transfer_count{direction="outbound"}[30m])) == 0
+          )
+          AND
+          (
+            hour() >= 6 AND hour() <= 22
+          )
+        for: 30m
+        labels:
+          severity: p1
+          pipeline: bayer-modeln
+          team: platform
+          component: sftp-outbound
+          sla_breach: "true"
+        annotations:
+          summary: "No outbound SFTP transfers in 30 minutes — McKesson/AXWAY SLA breach risk"
+          description: |
+            Zero outbound SFTP file transfers detected in the last 30 minutes during business hours.
+            Expected recipients: McKesson, AXWAY
+            Check: bay-modeln-s3-to-sftp-pythonshell-job-us-east-1 Glue job status
+          runbook: "https://wiki/nightwatch/runbooks/sftp-outbound-failed"
+
+      # P1: Glue S3-to-SFTP job failed (directly causes partner SLA breach)
+      - alert: GlueS3ToSftpJobFailed
+        expr: |
+          nightwatch_glue_job_status{
+            job_name="bay-modeln-s3-to-sftp-pythonshell-job-us-east-1",
+            status="FAILED"
+          } > 0
+        for: 1m
+        labels:
+          severity: p1
+          pipeline: bayer-modeln
+          team: platform
+          sla_breach: "true"
+        annotations:
+          summary: "Glue S3-to-SFTP job FAILED — outbound delivery to partners at risk"
+          description: |
+            The outbound Glue job (bay-modeln-s3-to-sftp-pythonshell-job-us-east-1) has failed.
+            This means files may not be delivered to McKesson and AXWAY.
+            Check the job run logs in AWS Glue console.
+
+      # P1: RODB EC2 instance unreachable
+      - alert: RODBInstanceUnhealthy
+        expr: |
+          aws_ec2_status_check_failed_maximum{
+            tag_Name="RODB-EC2"
+          } > 0
+        for: 5m
+        labels:
+          severity: p1
+          pipeline: bayer-modeln
+          team: platform
+          component: rodb-ec2
+        annotations:
+          summary: "RODB-EC2 instance failing health checks"
+          description: |
+            The RODB read-only database EC2 instance is unhealthy.
+            This will block Glue jobs that query RODB and may affect ModelN data access.
+
+      # P1: Glue RODB job failed (affects database write)
+      - alert: GlueRODBJobFailed
+        expr: |
+          nightwatch_glue_job_status{
+            job_name="bay-modeln-rodb-job-us-east-1",
+            status="FAILED"
+          } > 0
+        for: 2m
+        labels:
+          severity: p1
+          pipeline: bayer-modeln
+          team: platform
+          component: glue-rodb
+        annotations:
+          summary: "Glue RODB job FAILED — RODB database will have stale data"
+          description: |
+            The RODB write Glue job has failed.
+            RODB will have stale data until this is resolved.
+            Downstream: ModelN queries, Galaxy team reports
+
+  # ═══════════════════════════════════════════════════════════════════════
+  # P2: HIGH — Auto-remediate + notify
+  # SLA: 15-minute resolution
+  # ═══════════════════════════════════════════════════════════════════════
+  - name: nightwatch-p2-high
+    interval: 60s
+    rules:
+
+      # P2: Glue job duration > 2x historical average
+      - alert: GlueJobDurationAnomaly
+        expr: |
+          (
+            nightwatch_glue_job_duration_seconds
+            >
+            (
+              avg_over_time(nightwatch_glue_job_duration_seconds[7d]) * 2
+            )
+          )
+          AND
+          (
+            avg_over_time(nightwatch_glue_job_duration_seconds[7d]) > 0
+          )
+        for: 5m
+        labels:
+          severity: p2
+          pipeline: bayer-modeln
+          auto_remediate: "false"  # Monitor only — don't restart a slow running job
+        annotations:
+          summary: "Glue job {{ $labels.job_name }} running > 2x historical average"
+          description: |
+            Current duration: {{ $value | humanizeDuration }}
+            7-day average: {{ with query "avg_over_time(nightwatch_glue_job_duration_seconds{job_name='{{ $labels.job_name }}'}[7d])" }}{{ . | first | value | humanizeDuration }}{{ end }}
+            Possible causes: Large input file, DPU shortage, DynamoDB throttling
+
+      # P2: Any non-SFTP Glue job failed (first failure → P2, escalates to P1 on 3rd consecutive)
+      - alert: GlueJobFailed
+        expr: |
+          nightwatch_glue_job_status{
+            job_name!="bay-modeln-s3-to-sftp-pythonshell-job-us-east-1",
+            status="FAILED"
+          } > 0
+        for: 2m
+        labels:
+          severity: p2
+          pipeline: bayer-modeln
+          auto_remediate: "true"
+          playbook: glue-job-restart
+        annotations:
+          summary: "Glue job {{ $labels.job_name }} FAILED"
+          description: |
+            ETL job failed. Auto-restart will be attempted.
+            Job: {{ $labels.job_name }}
+            Check CloudWatch Logs for error details.
+
+      # P2: Glue job failed 3 consecutive times → escalate to P1
+      - alert: GlueJobConsecutiveFailures
+        expr: |
+          sum_over_time(
+            nightwatch_glue_job_status{status="FAILED"}[3h]
+          ) >= 3
+        for: 1m
+        labels:
+          severity: p1  # Escalate to P1 on 3 consecutive failures
+          pipeline: bayer-modeln
+          auto_remediate: "false"  # Stop auto-retry, need human
+        annotations:
+          summary: "Glue job {{ $labels.job_name }} has FAILED 3+ times — human intervention required"
+          description: |
+            This job has failed 3 or more times in 3 hours.
+            Auto-restart is disabled. Manual investigation required.
+
+      # P2: SFTP transfer volume < 50% of expected (inbound)
+      - alert: SFTPInboundVolumeLow
+        expr: |
+          (
+            sum(increase(nightwatch_sftp_transfer_count{direction="inbound"}[1h]))
+            /
+            sum(avg_over_time(nightwatch_sftp_transfer_count{direction="inbound"}[7d]) * 60)
+          ) < 0.5
+        for: 30m
+        labels:
+          severity: p2
+          pipeline: bayer-modeln
+          component: sftp-inbound
+        annotations:
+          summary: "Inbound SFTP transfer volume < 50% of 7-day average"
+          description: |
+            Expected inbound transfer volume is 50%+ below the 7-day average.
+            This may indicate a partner-side issue (McKesson/AXWAY not sending files).
+            Current rate: {{ $value | humanizePercentage }}
+
+      # P2: Audit Lambda errors (compliance impact)
+      - alert: AuditLambdaErrors
+        expr: |
+          increase(
+            aws_lambda_errors_sum{function_name="bay-modeln-capture-audit-info"}[5m]
+          ) > 0
+        for: 1m
+        labels:
+          severity: p2
+          pipeline: bayer-modeln
+          component: lambda-audit
+          compliance_impact: "true"
+        annotations:
+          summary: "Audit Lambda bay-modeln-capture-audit-info has errors — compliance trail gap"
+          description: |
+            Errors in the audit capture Lambda mean there is no compliance trail for recent pipeline runs.
+            Even if the pipeline completed successfully, missing audit records is a compliance issue.
+
+      # P2: File fetch Lambda errors
+      - alert: FileFetchLambdaErrors
+        expr: |
+          rate(
+            aws_lambda_errors_sum{function_name="bay-modeln-fetch-source-file-to-S3"}[5m]
+          ) > 0
+        for: 5m
+        labels:
+          severity: p2
+          pipeline: bayer-modeln
+          component: lambda-fetch
+        annotations:
+          summary: "File fetch Lambda has errors — source files may not be landing in S3"
+          description: |
+            bay-modeln-fetch-source-file-to-S3 Lambda is failing.
+            Source files from partners may not be copying to the S3 landing bucket.
+
+      # P2: DynamoDB throttling > 5%
+      - alert: DynamoDBThrottling
+        expr: |
+          (
+            sum(rate(aws_dynamodb_read_throttle_events_sum[5m]))
+            /
+            sum(rate(aws_dynamodb_consumed_read_capacity_units_sum[5m]))
+          ) > 0.05
+        for: 5m
+        labels:
+          severity: p2
+          pipeline: bayer-modeln
+          component: dynamodb
+          auto_remediate: "true"
+          playbook: dynamodb-autoscale
+        annotations:
+          summary: "DynamoDB read throttling > 5% — Glue jobs reading reference data may slow"
+          description: |
+            DynamoDB is throttling {{ $value | humanizePercentage }} of read requests.
+            All 10 reference tables (customers, products, price lists, etc.) are at risk.
+            Auto-remediation: Increasing read capacity.
+
+      # P2: EventBridge rule missed invocations
+      - alert: EventBridgeFailedInvocations
+        expr: |
+          sum(
+            rate(aws_events_failed_invocations_sum{rule_name=~".*modeln.*"}[5m])
+          ) > 0
+        for: 5m
+        labels:
+          severity: p2
+          pipeline: bayer-modeln
+          component: eventbridge
+        annotations:
+          summary: "EventBridge rule failed to invoke Step Function"
+          description: |
+            EventBridge rule {{ $labels.rule_name }} has failed invocations.
+            The pipeline scheduled trigger may not be working.
+
+      # P2: Snowflake load stale (downstream analytics delayed)
+      - alert: SnowflakeStaleFeed
+        expr: |
+          nightwatch_s3_last_modified_age_seconds{bucket=~".*enriched.*"} > 86400
+        for: 30m
+        labels:
+          severity: p2
+          pipeline: bayer-modeln
+          component: snowflake
+        annotations:
+          summary: "Enriched S3 bucket stale > 24h — Snowflake/Databricks feed likely delayed"
+          description: |
+            No new data in enriched S3 bucket for > 24 hours on a business day.
+            Downstream impact: Snowflake data warehouse, Databricks analytics for Galaxy team.
+
+  # ═══════════════════════════════════════════════════════════════════════
+  # P3: MEDIUM — Log + auto-remediate silently
+  # SLA: 1-hour resolution
+  # ═══════════════════════════════════════════════════════════════════════
+  - name: nightwatch-p3-medium
+    interval: 60s
+    rules:
+
+      # P3: Lambda error rate > 5% over 15 minutes
+      - alert: LambdaHighErrorRate
+        expr: |
+          (
+            rate(aws_lambda_errors_sum{function_name=~"bay-modeln.*"}[15m])
+            /
+            rate(aws_lambda_invocations_sum{function_name=~"bay-modeln.*"}[15m])
+          ) > 0.05
+        for: 5m
+        labels:
+          severity: p3
+          pipeline: bayer-modeln
+          component: lambda
+        annotations:
+          summary: "Lambda {{ $labels.function_name }} error rate > 5% (15min window)"
+          description: |
+            Error rate: {{ $value | humanizePercentage }}
+            This is above the 5% threshold. Watch for escalation.
+
+      # P3: Lambda duration > 80% of timeout
+      - alert: LambdaHighDuration
+        expr: |
+          aws_lambda_duration_maximum{function_name=~"bay-modeln.*"} >
+          (aws_lambda_timeout_seconds{function_name=~"bay-modeln.*"} * 0.8 * 1000)
+        for: 10m
+        labels:
+          severity: p3
+          pipeline: bayer-modeln
+          component: lambda
+        annotations:
+          summary: "Lambda {{ $labels.function_name }} running > 80% of its timeout"
+          description: |
+            Current max duration: {{ $value }}ms
+            At risk of timing out if input size increases.
+
+      # P3: DynamoDB read latency > 100ms p99
+      - alert: DynamoDBHighReadLatency
+        expr: |
+          aws_dynamodb_successful_request_latency_p99{operation="GetItem"} > 100
+        for: 10m
+        labels:
+          severity: p3
+          pipeline: bayer-modeln
+          component: dynamodb
+        annotations:
+          summary: "DynamoDB {{ $labels.table_name }} p99 GetItem latency > 100ms"
+          description: |
+            p99 latency: {{ $value }}ms
+            Reference data reads are slow. Glue jobs may take longer.
+            Check for hot partitions or throttling.
+
+      # P3: EventBridge rule not triggering on schedule (trigger count < expected)
+      - alert: EventBridgeRuleMissedTrigger
+        expr: |
+          sum_over_time(
+            aws_events_triggered_rules_sum{rule_name=~".*modeln.*"}[24h]
+          ) == 0
+        for: 30m
+        labels:
+          severity: p3
+          pipeline: bayer-modeln
+          component: eventbridge
+        annotations:
+          summary: "EventBridge rule {{ $labels.rule_name }} has not triggered in 24 hours"
+          description: |
+            No trigger events detected for this rule in the last 24 hours.
+            If this is a daily pipeline, it may have been disabled.
+
+      # P3: S3 raw bucket stale after Glue raw job run expected time
+      - alert: GlueRawJobDidNotWriteS3
+        expr: |
+          nightwatch_s3_last_modified_age_seconds{bucket=~".*raw.*"} > 14400  # 4 hours
+        for: 30m
+        labels:
+          severity: p3
+          pipeline: bayer-modeln
+          component: glue-raw
+        annotations:
+          summary: "S3 raw bucket {{ $labels.bucket }} stale > 4 hours"
+          description: |
+            The raw Glue job may not have run or written output.
+            Check: bay-modeln-raw-job-us-east-1 recent job runs.
+
+      # P3: SFTP authentication failures (potential security event)
+      - alert: SFTPAuthFailures
+        expr: |
+          increase(aws_transfer_server_authentication_failures_sum[10m]) > 5
+        for: 1m
+        labels:
+          severity: p3
+          pipeline: bayer-modeln
+          component: sftp-security
+          security: "true"
+        annotations:
+          summary: "SFTP server {{ $labels.server_id }} has > 5 auth failures in 10 minutes"
+          description: |
+            Possible brute force attempt or misconfigured partner credentials.
+            Count: {{ $value }} failures in 10 minutes
+
+  # ═══════════════════════════════════════════════════════════════════════
+  # P4: INFORMATIONAL — Log only, weekly digest
+  # ═══════════════════════════════════════════════════════════════════════
+  - name: nightwatch-p4-info
+    interval: 300s
+    rules:
+
+      # P4: S3 cost anomaly (bucket size growing unusually fast)
+      - alert: S3StorageCostAnomaly
+        expr: |
+          (
+            aws_s3_bucket_size_bytes_average
+            > avg_over_time(aws_s3_bucket_size_bytes_average[7d]) * 1.5
+          )
+        for: 1h
+        labels:
+          severity: p4
+          pipeline: bayer-modeln
+          component: s3-cost
+        annotations:
+          summary: "S3 bucket {{ $labels.bucket_name }} growing 50%+ faster than 7-day average"
+          description: |
+            Storage cost anomaly detected. Possible: large data loads, missing lifecycle policies.
+
+      # P4: DPU cost spike (Glue job using more capacity than usual)
+      - alert: GlueDPUCostSpike
+        expr: |
+          nightwatch_glue_job_duration_seconds * 2 >
+          avg_over_time(nightwatch_glue_job_duration_seconds[30d]) * 3
+        for: 1h
+        labels:
+          severity: p4
+          pipeline: bayer-modeln
+          component: glue-cost
+        annotations:
+          summary: "Glue job {{ $labels.job_name }} DPU cost 3x above 30-day average"
+          description: |
+            Extended job runtime = higher DPU cost.
+            Duration: {{ $value | humanizeDuration }}
+            Consider reviewing input data volume and Glue DPU configuration.

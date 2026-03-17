@@ -1,0 +1,338 @@
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: alertmanager-secrets
+  namespace: nightwatch
+  labels:
+    app.kubernetes.io/name: alertmanager
+    app.kubernetes.io/part-of: nightwatch-platform
+type: Opaque
+stringData:
+  # These values are injected from your secrets manager / CI/CD
+  # DO NOT commit real values to git
+  slack_webhook_url: "REPLACE_WITH_SLACK_WEBHOOK_URL"
+  alert_email_from: "nightwatch@strategybase.io"
+  alert_email_to: "REPLACE_WITH_ALERT_EMAIL"
+  smtp_host: "REPLACE_WITH_SMTP_HOST:587"
+  smtp_auth_username: "REPLACE_WITH_SMTP_USERNAME"
+  smtp_auth_password: "REPLACE_WITH_SMTP_PASSWORD"
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: alertmanager-config
+  namespace: nightwatch
+  labels:
+    app.kubernetes.io/name: alertmanager
+    app.kubernetes.io/part-of: nightwatch-platform
+data:
+  alertmanager.yml: |
+    global:
+      resolve_timeout: 5m
+      smtp_from: 'nightwatch@strategybase.io'
+      smtp_smarthost: '${SMTP_HOST}'
+      smtp_auth_username: '${SMTP_AUTH_USERNAME}'
+      smtp_auth_password: '${SMTP_AUTH_PASSWORD}'
+      smtp_require_tls: true
+      slack_api_url: '${SLACK_WEBHOOK_URL}'
+
+    # Alert grouping and deduplication
+    route:
+      group_by: ['alertname', 'pipeline', 'severity']
+      group_wait: 5m
+      group_interval: 10m
+      repeat_interval: 1h
+      receiver: 'default'
+      routes:
+        # ─────────────────────────────────────────────────────
+        # P1: CRITICAL — Page immediately, all channels
+        # ─────────────────────────────────────────────────────
+        - matchers:
+            - severity = "p1"
+          receiver: 'p1-critical'
+          group_wait: 0s          # No wait — fire immediately
+          group_interval: 5m
+          repeat_interval: 15m   # Keep reminding every 15min until resolved
+          continue: false
+
+        # ─────────────────────────────────────────────────────
+        # P2: HIGH — Notify Slack + email within 5 minutes
+        # ─────────────────────────────────────────────────────
+        - matchers:
+            - severity = "p2"
+          receiver: 'p2-high'
+          group_wait: 5m
+          group_interval: 15m
+          repeat_interval: 1h
+          continue: false
+
+        # ─────────────────────────────────────────────────────
+        # P3: MEDIUM — Slack only, 1 hour repeat
+        # ─────────────────────────────────────────────────────
+        - matchers:
+            - severity = "p3"
+          receiver: 'p3-medium'
+          group_wait: 15m
+          group_interval: 30m
+          repeat_interval: 4h
+          continue: false
+
+        # ─────────────────────────────────────────────────────
+        # P4: INFO — Log channel only
+        # ─────────────────────────────────────────────────────
+        - matchers:
+            - severity = "p4"
+          receiver: 'p4-info'
+          group_wait: 30m
+          repeat_interval: 24h
+          continue: false
+
+    # Inhibition rules: suppress lower-severity alerts when higher ones are firing
+    inhibit_rules:
+      # If entire Step Function is down (P1), suppress individual Lambda P2 alerts
+      - source_matchers:
+          - severity = "p1"
+          - alertname = "StepFunctionFailed"
+        target_matchers:
+          - severity = "p2"
+          - alertname =~ "Lambda.*"
+        equal: ['pipeline']
+
+      # If Glue job failed (P1), suppress duration warning (P2)
+      - source_matchers:
+          - severity = "p1"
+          - alertname = "GlueJobFailed"
+        target_matchers:
+          - severity = "p2"
+          - alertname = "GlueJobDurationAnomaly"
+        equal: ['job_name']
+
+    receivers:
+      # Default catch-all
+      - name: 'default'
+        slack_configs:
+          - channel: '#nightwatch-monitoring'
+            username: 'Nightwatch ⚡'
+            icon_emoji: ':eyes:'
+            color: 'warning'
+            title: '[{{ .Status | toUpper }}{{ if eq .Status "firing" }}:{{ .Alerts.Firing | len }}{{ end }}] {{ .CommonLabels.alertname }}'
+            text: |
+              {{ range .Alerts }}
+              *Alert:* {{ .Annotations.summary }}
+              *Description:* {{ .Annotations.description }}
+              *Severity:* {{ .Labels.severity | toUpper }}
+              *Pipeline:* {{ .Labels.pipeline }}
+              {{ end }}
+
+      # P1: Critical — Slack #incidents + email
+      - name: 'p1-critical'
+        slack_configs:
+          - channel: '#nightwatch-incidents'
+            username: 'Nightwatch ⚡ CRITICAL'
+            icon_emoji: ':rotating_light:'
+            color: 'danger'
+            title: '🚨 P1 CRITICAL: {{ .CommonLabels.alertname }}'
+            title_link: 'http://grafana.nightwatch.svc.cluster.local:3000'
+            text: |
+              {{ range .Alerts }}
+              *🔴 P1 ALERT — IMMEDIATE ACTION REQUIRED*
+
+              *Alert:* {{ .Annotations.summary }}
+              *Description:* {{ .Annotations.description }}
+              *Pipeline:* {{ .Labels.pipeline }}
+              *Component:* {{ .Labels.component }}
+              {{ if .Annotations.runbook }}*Runbook:* {{ .Annotations.runbook }}{{ end }}
+
+              *Labels:*
+              {{ range .Labels.SortedPairs }} - {{ .Name }}: {{ .Value }}
+              {{ end }}
+              {{ end }}
+            send_resolved: true
+        email_configs:
+          - to: '${ALERT_EMAIL}'
+            from: 'nightwatch@strategybase.io'
+            subject: '🚨 P1 NIGHTWATCH CRITICAL: {{ .CommonLabels.alertname }}'
+            html: |
+              <h2 style="color: red;">🚨 P1 Critical Alert — Bayer ModelN Pipeline</h2>
+              {{ range .Alerts }}
+              <p><strong>Alert:</strong> {{ .Annotations.summary }}</p>
+              <p><strong>Description:</strong> {{ .Annotations.description }}</p>
+              <p><strong>Status:</strong> {{ .Status }}</p>
+              <p><strong>Started:</strong> {{ .StartsAt }}</p>
+              {{ if .Annotations.runbook }}<p><a href="{{ .Annotations.runbook }}">📖 View Runbook</a></p>{{ end }}
+              {{ end }}
+            send_resolved: true
+
+      # P2: High — Slack #monitoring + email
+      - name: 'p2-high'
+        slack_configs:
+          - channel: '#nightwatch-monitoring'
+            username: 'Nightwatch ⚡'
+            icon_emoji: ':warning:'
+            color: '#FF8C00'
+            title: '⚠️ P2 HIGH: {{ .CommonLabels.alertname }}'
+            text: |
+              {{ range .Alerts }}
+              *⚠️ P2 Alert — Action Required (15min SLA)*
+
+              *Alert:* {{ .Annotations.summary }}
+              *Description:* {{ .Annotations.description }}
+              *Pipeline:* {{ .Labels.pipeline }}
+              {{ end }}
+            send_resolved: true
+        email_configs:
+          - to: '${ALERT_EMAIL}'
+            from: 'nightwatch@strategybase.io'
+            subject: '⚠️ P2 Nightwatch Alert: {{ .CommonLabels.alertname }}'
+            html: |
+              <h2 style="color: orange;">⚠️ P2 High Alert — Bayer ModelN Pipeline</h2>
+              {{ range .Alerts }}
+              <p><strong>Alert:</strong> {{ .Annotations.summary }}</p>
+              <p><strong>Description:</strong> {{ .Annotations.description }}</p>
+              {{ end }}
+            send_resolved: true
+
+      # P3: Medium — Slack only
+      - name: 'p3-medium'
+        slack_configs:
+          - channel: '#nightwatch-monitoring'
+            username: 'Nightwatch ⚡'
+            icon_emoji: ':information_source:'
+            color: '#36a64f'
+            title: 'ℹ️ P3: {{ .CommonLabels.alertname }}'
+            text: |
+              {{ range .Alerts }}
+              *Alert:* {{ .Annotations.summary }}
+              *Description:* {{ .Annotations.description }}
+              {{ end }}
+            send_resolved: true
+
+      # P4: Info — Slack only, low-volume
+      - name: 'p4-info'
+        slack_configs:
+          - channel: '#nightwatch-info'
+            username: 'Nightwatch ⚡'
+            icon_emoji: ':bar_chart:'
+            color: '#AAAAAA'
+            title: '📊 P4 Info: {{ .CommonLabels.alertname }}'
+            text: '{{ range .Alerts }}{{ .Annotations.summary }}{{ end }}'
+            send_resolved: false
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: alertmanager
+  namespace: nightwatch
+  labels:
+    app.kubernetes.io/name: alertmanager
+    app.kubernetes.io/part-of: nightwatch-platform
+    app: alertmanager
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: alertmanager
+  template:
+    metadata:
+      labels:
+        app: alertmanager
+        app.kubernetes.io/name: alertmanager
+        app.kubernetes.io/part-of: nightwatch-platform
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        fsGroup: 65534
+      containers:
+        - name: alertmanager
+          image: prom/alertmanager:v0.27.0
+          args:
+            - "--config.file=/etc/alertmanager/alertmanager.yml"
+            - "--storage.path=/alertmanager"
+            - "--web.external-url=http://alertmanager.nightwatch.svc.cluster.local:9093"
+            - "--log.level=info"
+            - "--log.format=json"
+          ports:
+            - name: http
+              containerPort: 9093
+              protocol: TCP
+          env:
+            - name: SLACK_WEBHOOK_URL
+              valueFrom:
+                secretKeyRef:
+                  name: alertmanager-secrets
+                  key: slack_webhook_url
+            - name: ALERT_EMAIL
+              valueFrom:
+                secretKeyRef:
+                  name: alertmanager-secrets
+                  key: alert_email_to
+            - name: SMTP_HOST
+              valueFrom:
+                secretKeyRef:
+                  name: alertmanager-secrets
+                  key: smtp_host
+            - name: SMTP_AUTH_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: alertmanager-secrets
+                  key: smtp_auth_username
+            - name: SMTP_AUTH_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: alertmanager-secrets
+                  key: smtp_auth_password
+          volumeMounts:
+            - name: alertmanager-config
+              mountPath: /etc/alertmanager
+              readOnly: true
+            - name: alertmanager-storage
+              mountPath: /alertmanager
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+          livenessProbe:
+            httpGet:
+              path: /-/healthy
+              port: 9093
+            initialDelaySeconds: 30
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /-/ready
+              port: 9093
+            initialDelaySeconds: 10
+            periodSeconds: 15
+      volumes:
+        - name: alertmanager-config
+          configMap:
+            name: alertmanager-config
+        - name: alertmanager-storage
+          emptyDir: {}
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: alertmanager
+  namespace: nightwatch
+  labels:
+    app.kubernetes.io/name: alertmanager
+    app.kubernetes.io/part-of: nightwatch-platform
+    app: alertmanager
+spec:
+  selector:
+    app: alertmanager
+  ports:
+    - name: http
+      port: 9093
+      targetPort: 9093
+      protocol: TCP
+  type: ClusterIP

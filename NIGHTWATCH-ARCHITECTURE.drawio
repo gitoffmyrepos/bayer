@@ -1,0 +1,363 @@
+<mxGraphModel dx="1422" dy="762" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1654" pageHeight="1169" math="0" shadow="0">
+  <root>
+    <mxCell id="0" />
+    <mxCell id="1" parent="0" />
+
+    <!-- ============================================================ -->
+    <!-- TITLE -->
+    <!-- ============================================================ -->
+    <mxCell id="title" value="Nightwatch — AI-Powered Monitoring Architecture for ModelN.io (Bayer)" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=18;fontStyle=1;" vertex="1" parent="1">
+      <mxGeometry x="20" y="10" width="1600" height="40" as="geometry" />
+    </mxCell>
+
+    <!-- ============================================================ -->
+    <!-- LEFT COLUMN: ModelN.io Components (Gray) -->
+    <!-- ============================================================ -->
+    <mxCell id="modeln-lane" value="ModelN.io Components (AWS US-East-1)" style="swimlane;startSize=30;fillColor=#f5f5f5;strokeColor=#666666;fontColor=#333333;fontStyle=1;fontSize=12;" vertex="1" parent="1">
+      <mxGeometry x="20" y="60" width="270" height="1060" as="geometry" />
+    </mxCell>
+
+    <!-- External Systems -->
+    <mxCell id="ext-systems" value="External Systems" style="swimlane;startSize=25;fillColor=#e0e0e0;strokeColor=#666666;fontStyle=1;fontSize=10;" vertex="1" parent="modeln-lane">
+      <mxGeometry x="10" y="40" width="250" height="120" as="geometry" />
+    </mxCell>
+    <mxCell id="modeln-app" value="🔵 ModelN SaaS" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=10;" vertex="1" parent="ext-systems">
+      <mxGeometry x="10" y="30" width="105" height="30" as="geometry" />
+    </mxCell>
+    <mxCell id="mckesson" value="McKesson" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=10;" vertex="1" parent="ext-systems">
+      <mxGeometry x="130" y="30" width="105" height="30" as="geometry" />
+    </mxCell>
+    <mxCell id="axway" value="AXWAY" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=10;" vertex="1" parent="ext-systems">
+      <mxGeometry x="10" y="75" width="105" height="30" as="geometry" />
+    </mxCell>
+    <mxCell id="erp" value="External ERP" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=10;" vertex="1" parent="ext-systems">
+      <mxGeometry x="130" y="75" width="105" height="30" as="geometry" />
+    </mxCell>
+
+    <!-- SFTP / Transfer Family -->
+    <mxCell id="sftp-group" value="SFTP / Transfer Family" style="swimlane;startSize=25;fillColor=#e0e0e0;strokeColor=#666666;fontStyle=1;fontSize=10;" vertex="1" parent="modeln-lane">
+      <mxGeometry x="10" y="175" width="250" height="80" as="geometry" />
+    </mxCell>
+    <mxCell id="transfer-family" value="Transfer Family" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=10;" vertex="1" parent="sftp-group">
+      <mxGeometry x="10" y="30" width="110" height="30" as="geometry" />
+    </mxCell>
+    <mxCell id="sftp-endpoint" value="SFTP Endpoint" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=10;" vertex="1" parent="sftp-group">
+      <mxGeometry x="135" y="30" width="105" height="30" as="geometry" />
+    </mxCell>
+
+    <!-- Step Functions -->
+    <mxCell id="sf-group" value="Step Functions (Orchestration)" style="swimlane;startSize=25;fillColor=#e0e0e0;strokeColor=#666666;fontStyle=1;fontSize=10;" vertex="1" parent="modeln-lane">
+      <mxGeometry x="10" y="270" width="250" height="110" as="geometry" />
+    </mxCell>
+    <mxCell id="sf-inbound" value="bay-modeln-jobs-workflow (Inbound)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=9;" vertex="1" parent="sf-group">
+      <mxGeometry x="10" y="30" width="230" height="30" as="geometry" />
+    </mxCell>
+    <mxCell id="sf-outbound" value="bay-modeln-outbound-jobs-wrkflw" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=9;" vertex="1" parent="sf-group">
+      <mxGeometry x="10" y="70" width="230" height="30" as="geometry" />
+    </mxCell>
+
+    <!-- Lambda Functions -->
+    <mxCell id="lambda-group" value="Lambda Functions" style="swimlane;startSize=25;fillColor=#e0e0e0;strokeColor=#666666;fontStyle=1;fontSize=10;" vertex="1" parent="modeln-lane">
+      <mxGeometry x="10" y="395" width="250" height="140" as="geometry" />
+    </mxCell>
+    <mxCell id="lambda-audit" value="capture-audit-info" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=9;" vertex="1" parent="lambda-group">
+      <mxGeometry x="10" y="30" width="110" height="30" as="geometry" />
+    </mxCell>
+    <mxCell id="lambda-email" value="email-attachment-error" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=9;" vertex="1" parent="lambda-group">
+      <mxGeometry x="130" y="30" width="110" height="30" as="geometry" />
+    </mxCell>
+    <mxCell id="lambda-init" value="initialize-parameter-stpfnc" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=9;" vertex="1" parent="lambda-group">
+      <mxGeometry x="10" y="70" width="110" height="30" as="geometry" />
+    </mxCell>
+    <mxCell id="lambda-fetch" value="fetch-source-file-to-S3" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=9;" vertex="1" parent="lambda-group">
+      <mxGeometry x="130" y="70" width="110" height="30" as="geometry" />
+    </mxCell>
+    <mxCell id="eventbridge" value="⏰ EventBridge Scheduler" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=9;" vertex="1" parent="lambda-group">
+      <mxGeometry x="10" y="105" width="230" height="25" as="geometry" />
+    </mxCell>
+
+    <!-- Glue Jobs -->
+    <mxCell id="glue-group" value="Glue ETL Jobs" style="swimlane;startSize=25;fillColor=#e0e0e0;strokeColor=#666666;fontStyle=1;fontSize=10;" vertex="1" parent="modeln-lane">
+      <mxGeometry x="10" y="550" width="250" height="140" as="geometry" />
+    </mxCell>
+    <mxCell id="glue-raw" value="raw-job-us-east-1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=9;" vertex="1" parent="glue-group">
+      <mxGeometry x="10" y="30" width="110" height="30" as="geometry" />
+    </mxCell>
+    <mxCell id="glue-enriched" value="enriched-job-us-east-1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=9;" vertex="1" parent="glue-group">
+      <mxGeometry x="130" y="30" width="110" height="30" as="geometry" />
+    </mxCell>
+    <mxCell id="glue-rodb" value="rodb-job-us-east-1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=9;" vertex="1" parent="glue-group">
+      <mxGeometry x="10" y="70" width="110" height="30" as="geometry" />
+    </mxCell>
+    <mxCell id="glue-sftp" value="s3-to-sftp-pythonshell" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=9;" vertex="1" parent="glue-group">
+      <mxGeometry x="130" y="70" width="110" height="30" as="geometry" />
+    </mxCell>
+    <mxCell id="glue-choice" value="[Choice: Run Raw Glue Job?]" style="rhombus;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=8;" vertex="1" parent="glue-group">
+      <mxGeometry x="60" y="105" width="130" height="30" as="geometry" />
+    </mxCell>
+
+    <!-- Storage -->
+    <mxCell id="storage-group" value="Storage (S3 + DynamoDB + RODB)" style="swimlane;startSize=25;fillColor=#e0e0e0;strokeColor=#666666;fontStyle=1;fontSize=10;" vertex="1" parent="modeln-lane">
+      <mxGeometry x="10" y="705" width="250" height="150" as="geometry" />
+    </mxCell>
+    <mxCell id="s3-landing" value="s3-landing" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=9;" vertex="1" parent="storage-group">
+      <mxGeometry x="10" y="30" width="70" height="30" as="geometry" />
+    </mxCell>
+    <mxCell id="s3-raw" value="s3-raw" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=9;" vertex="1" parent="storage-group">
+      <mxGeometry x="90" y="30" width="70" height="30" as="geometry" />
+    </mxCell>
+    <mxCell id="s3-enriched" value="s3-enriched" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=9;" vertex="1" parent="storage-group">
+      <mxGeometry x="170" y="30" width="70" height="30" as="geometry" />
+    </mxCell>
+    <mxCell id="dynamo-in" value="DynamoDB (6 inbound tables)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=9;" vertex="1" parent="storage-group">
+      <mxGeometry x="10" y="70" width="110" height="30" as="geometry" />
+    </mxCell>
+    <mxCell id="dynamo-out" value="DynamoDB (4 outbound tables)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=9;" vertex="1" parent="storage-group">
+      <mxGeometry x="130" y="70" width="110" height="30" as="geometry" />
+    </mxCell>
+    <mxCell id="rodb-ec2" value="RODB-EC2" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=9;" vertex="1" parent="storage-group">
+      <mxGeometry x="10" y="110" width="110" height="30" as="geometry" />
+    </mxCell>
+    <mxCell id="snowflake" value="Snowflake DWH" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=9;" vertex="1" parent="storage-group">
+      <mxGeometry x="130" y="110" width="110" height="30" as="geometry" />
+    </mxCell>
+
+    <!-- Downstream -->
+    <mxCell id="downstream-group" value="Downstream Analytics" style="swimlane;startSize=25;fillColor=#e0e0e0;strokeColor=#666666;fontStyle=1;fontSize=10;" vertex="1" parent="modeln-lane">
+      <mxGeometry x="10" y="870" width="250" height="70" as="geometry" />
+    </mxCell>
+    <mxCell id="databricks" value="Databricks" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=10;" vertex="1" parent="downstream-group">
+      <mxGeometry x="10" y="30" width="110" height="30" as="geometry" />
+    </mxCell>
+    <mxCell id="galaxy-team" value="Galaxy Team" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=10;" vertex="1" parent="downstream-group">
+      <mxGeometry x="130" y="30" width="110" height="30" as="geometry" />
+    </mxCell>
+
+    <!-- ============================================================ -->
+    <!-- CENTER: NIGHTWATCH 6 LAYERS -->
+    <!-- ============================================================ -->
+
+    <!-- LAYER 1: Data Collection (Blue) -->
+    <mxCell id="layer1" value="Layer 1: Universal Data Collection (Cloud-Agnostic)" style="swimlane;startSize=30;fillColor=#dae8fc;strokeColor=#6c8ebf;fontColor=#00376b;fontStyle=1;fontSize=12;" vertex="1" parent="1">
+      <mxGeometry x="320" y="60" width="300" height="250" as="geometry" />
+    </mxCell>
+    <mxCell id="otel" value="🔭 OpenTelemetry Collector&#xa;Metrics + Traces + Logs&#xa;from ANY cloud" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#bdd7ee;strokeColor=#6c8ebf;fontSize=10;" vertex="1" parent="layer1">
+      <mxGeometry x="10" y="40" width="130" height="55" as="geometry" />
+    </mxCell>
+    <mxCell id="prometheus" value="📊 Prometheus&#xa;+ CloudWatch Exporter&#xa;infra metrics" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#bdd7ee;strokeColor=#6c8ebf;fontSize=10;" vertex="1" parent="layer1">
+      <mxGeometry x="155" y="40" width="130" height="55" as="geometry" />
+    </mxCell>
+    <mxCell id="fluentbit" value="📋 Fluent Bit&#xa;Log aggregation&#xa;CloudWatch → OpenSearch" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#bdd7ee;strokeColor=#6c8ebf;fontSize=10;" vertex="1" parent="layer1">
+      <mxGeometry x="10" y="110" width="130" height="55" as="geometry" />
+    </mxCell>
+    <mxCell id="custom-collector" value="🐍 Custom Python&#xa;Step Function history&#xa;Glue run status (boto3)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#bdd7ee;strokeColor=#6c8ebf;fontSize=10;" vertex="1" parent="layer1">
+      <mxGeometry x="155" y="110" width="130" height="55" as="geometry" />
+    </mxCell>
+    <mxCell id="kafka" value="⚡ Kafka / Redpanda — Unified Event Streaming Backbone" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#006eaf;strokeColor=#006eaf;fontColor=#ffffff;fontStyle=1;fontSize=10;" vertex="1" parent="layer1">
+      <mxGeometry x="10" y="180" width="275" height="35" as="geometry" />
+    </mxCell>
+
+    <!-- LAYER 2: Storage (Purple) -->
+    <mxCell id="layer2" value="Layer 2: Storage &amp; Indexing" style="swimlane;startSize=30;fillColor=#e1d5e7;strokeColor=#9673a6;fontColor=#3a006f;fontStyle=1;fontSize=12;" vertex="1" parent="1">
+      <mxGeometry x="320" y="330" width="300" height="200" as="geometry" />
+    </mxCell>
+    <mxCell id="victoriametrics" value="📈 VictoriaMetrics&#xa;Time-series (Prometheus-compat)&#xa;90 day retention" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5b8e8;strokeColor=#9673a6;fontSize=10;" vertex="1" parent="layer2">
+      <mxGeometry x="10" y="40" width="130" height="55" as="geometry" />
+    </mxCell>
+    <mxCell id="opensearch" value="🔍 OpenSearch&#xa;Log storage + search&#xa;30 day retention" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5b8e8;strokeColor=#9673a6;fontSize=10;" vertex="1" parent="layer2">
+      <mxGeometry x="155" y="40" width="130" height="55" as="geometry" />
+    </mxCell>
+    <mxCell id="clickhouse" value="⚡ ClickHouse&#xa;Pipeline analytics&#xa;1 year retention" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5b8e8;strokeColor=#9673a6;fontSize=10;" vertex="1" parent="layer2">
+      <mxGeometry x="10" y="115" width="130" height="55" as="geometry" />
+    </mxCell>
+    <mxCell id="redis" value="🔴 Redis&#xa;Alert state + dedup&#xa;Step Function cache" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5b8e8;strokeColor=#9673a6;fontSize=10;" vertex="1" parent="layer2">
+      <mxGeometry x="155" y="115" width="130" height="55" as="geometry" />
+    </mxCell>
+
+    <!-- LAYER 3: AI Engine (Green) -->
+    <mxCell id="layer3" value="Layer 3: AI Intelligence Engine" style="swimlane;startSize=30;fillColor=#d5e8d4;strokeColor=#82b366;fontColor=#1a4d00;fontStyle=1;fontSize=12;" vertex="1" parent="1">
+      <mxGeometry x="320" y="550" width="300" height="280" as="geometry" />
+    </mxCell>
+    <mxCell id="prophet" value="📉 Prophet&#xa;Trend anomaly detection&#xa;(Glue job durations, S3 counts)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#b9ddb4;strokeColor=#82b366;fontSize=10;" vertex="1" parent="layer3">
+      <mxGeometry x="10" y="40" width="130" height="55" as="geometry" />
+    </mxCell>
+    <mxCell id="isolation-forest" value="🌲 Isolation Forest&#xa;Point anomaly detection&#xa;(file counts, Lambda errors)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#b9ddb4;strokeColor=#82b366;fontSize=10;" vertex="1" parent="layer3">
+      <mxGeometry x="155" y="40" width="130" height="55" as="geometry" />
+    </mxCell>
+    <mxCell id="lstm" value="🧠 LSTM Autoencoder&#xa;Sequence anomalies&#xa;(Step Function paths)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#b9ddb4;strokeColor=#82b366;fontSize=10;" vertex="1" parent="layer3">
+      <mxGeometry x="10" y="110" width="130" height="55" as="geometry" />
+    </mxCell>
+    <mxCell id="alert-classifier" value="🎯 Alert Classifier&#xa;ML severity triage&#xa;P1/P2/P3/P4" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#b9ddb4;strokeColor=#82b366;fontSize=10;" vertex="1" parent="layer3">
+      <mxGeometry x="155" y="110" width="130" height="55" as="geometry" />
+    </mxCell>
+    <mxCell id="rca" value="🔬 Root Cause Analysis&#xa;Causal graph (96 edges from drawio)&#xa;+ Ollama LLM explanation" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#b9ddb4;strokeColor=#82b366;fontSize=10;" vertex="1" parent="layer3">
+      <mxGeometry x="10" y="180" width="130" height="65" as="geometry" />
+    </mxCell>
+    <mxCell id="predictor" value="🔮 Prediction Engine&#xa;Forecast failures 30-60min ahead&#xa;Volume + capacity planning" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#b9ddb4;strokeColor=#82b366;fontSize=10;" vertex="1" parent="layer3">
+      <mxGeometry x="155" y="180" width="130" height="65" as="geometry" />
+    </mxCell>
+
+    <!-- LAYER 4: Remediation (Orange) -->
+    <mxCell id="layer4" value="Layer 4: Remediation Engine" style="swimlane;startSize=30;fillColor=#ffe6cc;strokeColor=#d79b00;fontColor=#7d4600;fontStyle=1;fontSize=12;" vertex="1" parent="1">
+      <mxGeometry x="320" y="850" width="300" height="200" as="geometry" />
+    </mxCell>
+    <mxCell id="playbook-runner" value="📖 Playbook Runner&#xa;Per-component scripts&#xa;(Glue restart, DDB scale, SFTP retry)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffd5a8;strokeColor=#d79b00;fontSize=10;" vertex="1" parent="layer4">
+      <mxGeometry x="10" y="40" width="130" height="65" as="geometry" />
+    </mxCell>
+    <mxCell id="auto-remediate" value="⚙️ Auto-Remediate P2/P3&#xa;Restart Glue jobs&#xa;Scale DynamoDB&#xa;Retry SFTP transfers" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffd5a8;strokeColor=#d79b00;fontSize=10;" vertex="1" parent="layer4">
+      <mxGeometry x="155" y="40" width="130" height="65" as="geometry" />
+    </mxCell>
+    <mxCell id="audit-log" value="📋 Audit Log&#xa;Every action logged&#xa;to OpenSearch" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffd5a8;strokeColor=#d79b00;fontSize=10;" vertex="1" parent="layer4">
+      <mxGeometry x="10" y="120" width="130" height="45" as="geometry" />
+    </mxCell>
+    <mxCell id="dry-run" value="🧪 Dry-Run Mode&#xa;Test playbooks safely&#xa;before production" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffd5a8;strokeColor=#d79b00;fontSize=10;" vertex="1" parent="layer4">
+      <mxGeometry x="155" y="120" width="130" height="45" as="geometry" />
+    </mxCell>
+
+    <!-- ============================================================ -->
+    <!-- RIGHT COLUMN: Output / Alerting (Red) + Dashboards -->
+    <!-- ============================================================ -->
+
+    <!-- LAYER 5: Alerting (Red) -->
+    <mxCell id="layer5" value="Layer 5: Alerting" style="swimlane;startSize=30;fillColor=#f8cecc;strokeColor=#b85450;fontColor=#6a0000;fontStyle=1;fontSize=12;" vertex="1" parent="1">
+      <mxGeometry x="660" y="60" width="280" height="280" as="geometry" />
+    </mxCell>
+    <mxCell id="alertmanager" value="🚨 AlertManager&#xa;Deduplication + routing&#xa;Silence + inhibition" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f4b8b5;strokeColor=#b85450;fontSize=10;" vertex="1" parent="layer5">
+      <mxGeometry x="10" y="40" width="130" height="55" as="geometry" />
+    </mxCell>
+    <mxCell id="severity-matrix" value="P1 → PagerDuty + Slack #incidents&#xa;P2 → Auto-fix + #modeln-monitoring&#xa;P3 → Silent fix + log&#xa;P4 → Log only" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f4b8b5;strokeColor=#b85450;fontSize=10;align=left;" vertex="1" parent="layer5">
+      <mxGeometry x="150" y="40" width="120" height="80" as="geometry" />
+    </mxCell>
+    <mxCell id="pagerduty" value="📟 PagerDuty Webhook&#xa;On-call escalation&#xa;P1 incidents" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f4b8b5;strokeColor=#b85450;fontSize=10;" vertex="1" parent="layer5">
+      <mxGeometry x="10" y="115" width="130" height="55" as="geometry" />
+    </mxCell>
+    <mxCell id="slack-alerts" value="💬 Slack Channels&#xa;#incidents (P1)&#xa;#modeln-monitoring (P2/P3)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f4b8b5;strokeColor=#b85450;fontSize=10;" vertex="1" parent="layer5">
+      <mxGeometry x="10" y="185" width="130" height="55" as="geometry" />
+    </mxCell>
+    <mxCell id="email-alerts" value="📧 Email Alerts&#xa;Team lead notification&#xa;Incident digest" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f4b8b5;strokeColor=#b85450;fontSize=10;" vertex="1" parent="layer5">
+      <mxGeometry x="150" y="185" width="120" height="55" as="geometry" />
+    </mxCell>
+
+    <!-- LAYER 6: Dashboards -->
+    <mxCell id="layer6" value="Layer 6: Dashboards &amp; Observability" style="swimlane;startSize=30;fillColor=#fff2cc;strokeColor=#d6b656;fontColor=#7d4600;fontStyle=1;fontSize=12;" vertex="1" parent="1">
+      <mxGeometry x="660" y="360" width="280" height="450" as="geometry" />
+    </mxCell>
+    <mxCell id="grafana" value="📊 Grafana" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe8a0;strokeColor=#d6b656;fontStyle=1;fontSize=11;" vertex="1" parent="layer6">
+      <mxGeometry x="10" y="40" width="260" height="30" as="geometry" />
+    </mxCell>
+    <mxCell id="dash1" value="Pipeline Overview — end-to-end health, SLA compliance" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff8dc;strokeColor=#d6b656;fontSize=9;" vertex="1" parent="layer6">
+      <mxGeometry x="10" y="80" width="260" height="30" as="geometry" />
+    </mxCell>
+    <mxCell id="dash2" value="S3 Data Flow — object counts per bucket per run" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff8dc;strokeColor=#d6b656;fontSize=9;" vertex="1" parent="layer6">
+      <mxGeometry x="10" y="118" width="260" height="30" as="geometry" />
+    </mxCell>
+    <mxCell id="dash3" value="Glue Job Performance — durations, DPU, row counts" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff8dc;strokeColor=#d6b656;fontSize=9;" vertex="1" parent="layer6">
+      <mxGeometry x="10" y="156" width="260" height="30" as="geometry" />
+    </mxCell>
+    <mxCell id="dash4" value="Step Function Execution — timeline, branches, failures" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff8dc;strokeColor=#d6b656;fontSize=9;" vertex="1" parent="layer6">
+      <mxGeometry x="10" y="194" width="260" height="30" as="geometry" />
+    </mxCell>
+    <mxCell id="dash5" value="SFTP Transfer Monitor — partner delivery tracking" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff8dc;strokeColor=#d6b656;fontSize=9;" vertex="1" parent="layer6">
+      <mxGeometry x="10" y="232" width="260" height="30" as="geometry" />
+    </mxCell>
+    <mxCell id="dash6" value="Infrastructure Health — RODB-EC2, DynamoDB, Transfer" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff8dc;strokeColor=#d6b656;fontSize=9;" vertex="1" parent="layer6">
+      <mxGeometry x="10" y="270" width="260" height="30" as="geometry" />
+    </mxCell>
+    <mxCell id="dash7" value="AI Anomaly Dashboard — active anomalies + confidence scores" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff8dc;strokeColor=#d6b656;fontSize=9;" vertex="1" parent="layer6">
+      <mxGeometry x="10" y="308" width="260" height="30" as="geometry" />
+    </mxCell>
+    <mxCell id="dash8" value="Business Data Quality — chargebacks, Medicaid, price lists" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff8dc;strokeColor=#d6b656;fontSize=9;" vertex="1" parent="layer6">
+      <mxGeometry x="10" y="346" width="260" height="30" as="geometry" />
+    </mxCell>
+    <mxCell id="ollama" value="🤖 Ollama (Local LLM)&#xa;RCA natural language summaries&#xa;No cloud dependency — air-gap capable" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe8a0;strokeColor=#d6b656;fontSize=10;" vertex="1" parent="layer6">
+      <mxGeometry x="10" y="395" width="260" height="45" as="geometry" />
+    </mxCell>
+
+    <!-- Implementation Phases box -->
+    <mxCell id="phases" value="Implementation Phases&#xa;Phase 1 (Wk 1-2): Collect + Threshold Alerts&#xa;Phase 2 (Wk 3-4): AI Anomaly Detection&#xa;Phase 3 (Wk 5-6): Auto-Remediation + RCA" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontSize=10;align=left;" vertex="1" parent="1">
+      <mxGeometry x="660" y="830" width="280" height="80" as="geometry" />
+    </mxCell>
+
+    <!-- Tech Stack Summary -->
+    <mxCell id="techstack" value="Tech Stack (100% Open-Source, Cloud-Agnostic)&#xa;Prometheus · OpenTelemetry · Fluent Bit · VictoriaMetrics&#xa;OpenSearch · ClickHouse · Redis · Kafka/Redpanda&#xa;Prophet · scikit-learn · PyTorch · Ollama · Grafana · AlertManager" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontSize=9;align=left;" vertex="1" parent="1">
+      <mxGeometry x="660" y="920" width="280" height="70" as="geometry" />
+    </mxCell>
+
+    <!-- ============================================================ -->
+    <!-- ARROWS: ModelN Components → Layer 1 (Collection) -->
+    <!-- ============================================================ -->
+    <mxCell id="e1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;strokeColor=#6c8ebf;strokeWidth=2;" edge="1" source="transfer-family" target="otel" parent="1">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+    <mxCell id="e2" style="edgeStyle=orthogonalEdgeStyle;rounded=0;strokeColor=#6c8ebf;strokeWidth=2;" edge="1" source="sf-inbound" target="custom-collector" parent="1">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+    <mxCell id="e3" style="edgeStyle=orthogonalEdgeStyle;rounded=0;strokeColor=#6c8ebf;strokeWidth=2;" edge="1" source="glue-raw" target="custom-collector" parent="1">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+    <mxCell id="e4" style="edgeStyle=orthogonalEdgeStyle;rounded=0;strokeColor=#6c8ebf;strokeWidth=2;" edge="1" source="s3-landing" target="prometheus" parent="1">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+    <mxCell id="e5" style="edgeStyle=orthogonalEdgeStyle;rounded=0;strokeColor=#6c8ebf;strokeWidth=2;" edge="1" source="lambda-audit" target="fluentbit" parent="1">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+    <mxCell id="e6" style="edgeStyle=orthogonalEdgeStyle;rounded=0;strokeColor=#6c8ebf;strokeWidth=2;" edge="1" source="rodb-ec2" target="prometheus" parent="1">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+    <mxCell id="e7" style="edgeStyle=orthogonalEdgeStyle;rounded=0;strokeColor=#6c8ebf;strokeWidth=2;" edge="1" source="dynamo-in" target="custom-collector" parent="1">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+    <mxCell id="e8" style="edgeStyle=orthogonalEdgeStyle;rounded=0;strokeColor=#6c8ebf;strokeWidth=2;" edge="1" source="eventbridge" target="custom-collector" parent="1">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+
+    <!-- Layer 1 → Layer 2 -->
+    <mxCell id="e10" style="edgeStyle=orthogonalEdgeStyle;rounded=0;strokeColor=#9673a6;strokeWidth=2;entryX=0.5;entryY=0;entryDx=0;entryDy=0;exitX=0.5;exitY=1;exitDx=0;exitDy=0;" edge="1" source="layer1" target="layer2" parent="1">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+
+    <!-- Layer 2 → Layer 3 -->
+    <mxCell id="e11" style="edgeStyle=orthogonalEdgeStyle;rounded=0;strokeColor=#82b366;strokeWidth=2;entryX=0.5;entryY=0;entryDx=0;entryDy=0;exitX=0.5;exitY=1;exitDx=0;exitDy=0;" edge="1" source="layer2" target="layer3" parent="1">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+
+    <!-- Layer 3 → Layer 4 -->
+    <mxCell id="e12" style="edgeStyle=orthogonalEdgeStyle;rounded=0;strokeColor=#d79b00;strokeWidth=2;entryX=0.5;entryY=0;entryDx=0;entryDy=0;exitX=0.5;exitY=1;exitDx=0;exitDy=0;" edge="1" source="layer3" target="layer4" parent="1">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+
+    <!-- Layer 3 → Alerting (anomalies fire alerts) -->
+    <mxCell id="e13" style="edgeStyle=orthogonalEdgeStyle;rounded=0;strokeColor=#b85450;strokeWidth=2;dashed=1;" edge="1" source="alert-classifier" target="layer5" parent="1">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+
+    <!-- Layer 4 → Alerting (remediation results) -->
+    <mxCell id="e14" style="edgeStyle=orthogonalEdgeStyle;rounded=0;strokeColor=#b85450;strokeWidth=2;dashed=1;" edge="1" source="auto-remediate" target="layer5" parent="1">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+
+    <!-- Layer 3 → Dashboards -->
+    <mxCell id="e15" style="edgeStyle=orthogonalEdgeStyle;rounded=0;strokeColor=#d6b656;strokeWidth=2;" edge="1" source="layer3" target="layer6" parent="1">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+
+    <!-- Layer 4 → Auto-fix back to ModelN components -->
+    <mxCell id="e16" value="auto-fix" style="edgeStyle=orthogonalEdgeStyle;rounded=0;strokeColor=#d79b00;strokeWidth=2;fontStyle=1;fontSize=9;fillColor=#ffe6cc;" edge="1" source="auto-remediate" target="glue-raw" parent="1">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+    <mxCell id="e17" value="restart" style="edgeStyle=orthogonalEdgeStyle;rounded=0;strokeColor=#d79b00;strokeWidth=2;fontStyle=1;fontSize=9;" edge="1" source="playbook-runner" target="sf-inbound" parent="1">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+
+    <!-- Alerting → External (P1 escalation) -->
+    <mxCell id="e18" value="P1 Escalation" style="edgeStyle=orthogonalEdgeStyle;rounded=0;strokeColor=#b85450;strokeWidth=2;fontStyle=1;fontSize=9;fillColor=#f8cecc;" edge="1" source="pagerduty" target="galaxy-team" parent="1">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+
+    <!-- Data flow label -->
+    <mxCell id="flow-label" value="← Data flows left-to-right: ModelN.io → Collect → Store → AI → Remediate → Alert/Dashboard →" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=10;fontStyle=2;" vertex="1" parent="1">
+      <mxGeometry x="20" y="1040" width="920" height="20" as="geometry" />
+    </mxCell>
+
+  </root>
+</mxGraphModel>

@@ -1,0 +1,133 @@
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: nightwatch-collector
+  namespace: nightwatch
+  labels:
+    app.kubernetes.io/name: nightwatch-collector
+    app.kubernetes.io/part-of: nightwatch-platform
+  annotations:
+    description: "Service account for Nightwatch data collectors — read access to cluster state"
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: nightwatch-collector-role
+  labels:
+    app.kubernetes.io/name: nightwatch-collector
+    app.kubernetes.io/part-of: nightwatch-platform
+rules:
+  # Core workload visibility
+  - apiGroups: [""]
+    resources:
+      - pods
+      - pods/log
+      - pods/status
+      - services
+      - endpoints
+      - nodes
+      - nodes/metrics
+      - namespaces
+      - configmaps
+      - events
+      - replicationcontrollers
+      - resourcequotas
+      - limitranges
+      - persistentvolumes
+      - persistentvolumeclaims
+    verbs: ["get", "list", "watch"]
+  # Apps workloads
+  - apiGroups: ["apps"]
+    resources:
+      - deployments
+      - daemonsets
+      - statefulsets
+      - replicasets
+    verbs: ["get", "list", "watch"]
+  # Batch jobs
+  - apiGroups: ["batch"]
+    resources:
+      - jobs
+      - cronjobs
+    verbs: ["get", "list", "watch"]
+  # Networking
+  - apiGroups: ["networking.k8s.io"]
+    resources:
+      - ingresses
+      - networkpolicies
+    verbs: ["get", "list", "watch"]
+  # Storage
+  - apiGroups: ["storage.k8s.io"]
+    resources:
+      - storageclasses
+      - volumeattachments
+    verbs: ["get", "list", "watch"]
+  # HPA + autoscaling
+  - apiGroups: ["autoscaling"]
+    resources:
+      - horizontalpodautoscalers
+    verbs: ["get", "list", "watch"]
+  # Metrics API (for node/pod metrics)
+  - apiGroups: ["metrics.k8s.io"]
+    resources:
+      - nodes
+      - pods
+    verbs: ["get", "list"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: nightwatch-collector-rolebinding
+  labels:
+    app.kubernetes.io/name: nightwatch-collector
+    app.kubernetes.io/part-of: nightwatch-platform
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: nightwatch-collector-role
+subjects:
+  - kind: ServiceAccount
+    name: nightwatch-collector
+    namespace: nightwatch
+
+---
+# Additional role for writing to ConfigMaps (remediation state tracking)
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: nightwatch-remediation-role
+  namespace: nightwatch
+  labels:
+    app.kubernetes.io/name: nightwatch-remediation
+    app.kubernetes.io/part-of: nightwatch-platform
+rules:
+  - apiGroups: [""]
+    resources:
+      - configmaps
+      - secrets
+    verbs: ["get", "list", "watch", "create", "update", "patch"]
+  - apiGroups: [""]
+    resources:
+      - events
+    verbs: ["create", "patch"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: nightwatch-remediation-rolebinding
+  namespace: nightwatch
+  labels:
+    app.kubernetes.io/name: nightwatch-remediation
+    app.kubernetes.io/part-of: nightwatch-platform
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: nightwatch-remediation-role
+subjects:
+  - kind: ServiceAccount
+    name: nightwatch-collector
+    namespace: nightwatch

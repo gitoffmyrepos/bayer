@@ -1,0 +1,332 @@
+# Nightwatch — ModelN.io Pipeline Monitoring Targets
+# This config tells Prometheus/CloudWatch Exporter what to scrape from AWS
+# Used by: prometheus-cloudwatch-exporter (Job: cloudwatch-exporter)
+# AWS Region: us-east-1
+# Last Updated: 2026-03-16
+
+---
+# CloudWatch Exporter configuration
+# Deploy alongside Prometheus to bridge CloudWatch metrics → Prometheus format
+# Reference: https://github.com/prometheus/cloudwatch_exporter
+
+cloudwatch_exporter_config:
+  region: us-east-1
+
+  # ═══════════════════════════════════════════════════════════
+  # S3 BUCKET METRICS
+  # ═══════════════════════════════════════════════════════════
+  metrics:
+    # S3 Landing bucket — inbound files from partners
+    - aws_namespace: AWS/S3
+      aws_metric_name: NumberOfObjects
+      aws_dimensions: [BucketName, StorageType]
+      aws_statistics: [Average]
+      period_seconds: 86400  # S3 metrics only available daily
+      aws_dimension_select:
+        BucketName:
+          - s3-landing-us-east-1
+          - S3-Raw-bucket-us-east-1
+          - s3-Enriched-us-east-1
+        StorageType:
+          - AllStorageTypes
+
+    - aws_namespace: AWS/S3
+      aws_metric_name: BucketSizeBytes
+      aws_dimensions: [BucketName, StorageType]
+      aws_statistics: [Average]
+      period_seconds: 86400
+      aws_dimension_select:
+        BucketName:
+          - s3-landing-us-east-1
+          - S3-Raw-bucket-us-east-1
+          - s3-Enriched-us-east-1
+        StorageType:
+          - StandardStorage
+
+    # ═══════════════════════════════════════════════════════════
+    # STEP FUNCTIONS
+    # ═══════════════════════════════════════════════════════════
+    - aws_namespace: AWS/States
+      aws_metric_name: ExecutionsStarted
+      aws_dimensions: [StateMachineArn]
+      aws_statistics: [Sum]
+      period_seconds: 300
+      aws_dimension_select_regex:
+        StateMachineArn:
+          - ".*bay-modeln.*"
+
+    - aws_namespace: AWS/States
+      aws_metric_name: ExecutionsSucceeded
+      aws_dimensions: [StateMachineArn]
+      aws_statistics: [Sum]
+      period_seconds: 300
+      aws_dimension_select_regex:
+        StateMachineArn:
+          - ".*bay-modeln.*"
+
+    - aws_namespace: AWS/States
+      aws_metric_name: ExecutionsFailed
+      aws_dimensions: [StateMachineArn]
+      aws_statistics: [Sum]
+      period_seconds: 300
+      aws_dimension_select_regex:
+        StateMachineArn:
+          - ".*bay-modeln.*"
+
+    - aws_namespace: AWS/States
+      aws_metric_name: ExecutionsTimedOut
+      aws_dimensions: [StateMachineArn]
+      aws_statistics: [Sum]
+      period_seconds: 300
+      aws_dimension_select_regex:
+        StateMachineArn:
+          - ".*bay-modeln.*"
+
+    - aws_namespace: AWS/States
+      aws_metric_name: ExecutionThrottled
+      aws_dimensions: [StateMachineArn]
+      aws_statistics: [Sum]
+      period_seconds: 300
+      aws_dimension_select_regex:
+        StateMachineArn:
+          - ".*bay-modeln.*"
+
+    - aws_namespace: AWS/States
+      aws_metric_name: ExecutionTime
+      aws_dimensions: [StateMachineArn]
+      aws_statistics: [Average, p50, p90, p99]
+      period_seconds: 300
+      aws_dimension_select_regex:
+        StateMachineArn:
+          - ".*bay-modeln.*"
+
+    # ═══════════════════════════════════════════════════════════
+    # GLUE JOB METRICS
+    # ═══════════════════════════════════════════════════════════
+    - aws_namespace: Glue
+      aws_metric_name: glue.driver.aggregate.elapsedTime
+      aws_dimensions: [JobName, JobRunId]
+      aws_statistics: [Average, Maximum]
+      period_seconds: 300
+      aws_dimension_select:
+        JobName:
+          - bay-modeln-raw-job-us-east-1
+          - bay-modeln-enriched-job-us-east-1
+          - bay-modeln-rodb-job-us-east-1
+          - bay-modeln-s3-to-sftp-pythonshell-job-us-east-1
+
+    - aws_namespace: Glue
+      aws_metric_name: glue.driver.aggregate.numFailedTasks
+      aws_dimensions: [JobName, JobRunId]
+      aws_statistics: [Sum]
+      period_seconds: 300
+      aws_dimension_select:
+        JobName:
+          - bay-modeln-raw-job-us-east-1
+          - bay-modeln-enriched-job-us-east-1
+          - bay-modeln-rodb-job-us-east-1
+          - bay-modeln-s3-to-sftp-pythonshell-job-us-east-1
+
+    - aws_namespace: Glue
+      aws_metric_name: glue.driver.aggregate.recordsRead
+      aws_dimensions: [JobName, JobRunId]
+      aws_statistics: [Sum]
+      period_seconds: 300
+
+    - aws_namespace: Glue
+      aws_metric_name: glue.ALL.jvm.heap.usage
+      aws_dimensions: [JobName, JobRunId]
+      aws_statistics: [Average, Maximum]
+      period_seconds: 60
+
+    # ═══════════════════════════════════════════════════════════
+    # LAMBDA FUNCTION METRICS
+    # ═══════════════════════════════════════════════════════════
+    - aws_namespace: AWS/Lambda
+      aws_metric_name: Invocations
+      aws_dimensions: [FunctionName]
+      aws_statistics: [Sum]
+      period_seconds: 300
+      aws_dimension_select:
+        FunctionName:
+          - bay-modeln-capture-audit-info
+          - bay-modeln-email-attachment-error
+          - bay-modeln-initialize-parameter-stpfnc
+          - bay-modeln-fetch-source-file-to-S3
+
+    - aws_namespace: AWS/Lambda
+      aws_metric_name: Errors
+      aws_dimensions: [FunctionName]
+      aws_statistics: [Sum]
+      period_seconds: 300
+      aws_dimension_select:
+        FunctionName:
+          - bay-modeln-capture-audit-info
+          - bay-modeln-email-attachment-error
+          - bay-modeln-initialize-parameter-stpfnc
+          - bay-modeln-fetch-source-file-to-S3
+
+    - aws_namespace: AWS/Lambda
+      aws_metric_name: Duration
+      aws_dimensions: [FunctionName]
+      aws_statistics: [Average, p50, p90, p99, Maximum]
+      period_seconds: 300
+      aws_dimension_select:
+        FunctionName:
+          - bay-modeln-capture-audit-info
+          - bay-modeln-email-attachment-error
+          - bay-modeln-initialize-parameter-stpfnc
+          - bay-modeln-fetch-source-file-to-S3
+
+    - aws_namespace: AWS/Lambda
+      aws_metric_name: ConcurrentExecutions
+      aws_dimensions: [FunctionName]
+      aws_statistics: [Maximum]
+      period_seconds: 300
+      aws_dimension_select_regex:
+        FunctionName:
+          - ".*bay-modeln.*"
+
+    - aws_namespace: AWS/Lambda
+      aws_metric_name: Throttles
+      aws_dimensions: [FunctionName]
+      aws_statistics: [Sum]
+      period_seconds: 300
+      aws_dimension_select_regex:
+        FunctionName:
+          - ".*bay-modeln.*"
+
+    # ═══════════════════════════════════════════════════════════
+    # DYNAMODB TABLE METRICS
+    # ═══════════════════════════════════════════════════════════
+    - aws_namespace: AWS/DynamoDB
+      aws_metric_name: ConsumedReadCapacityUnits
+      aws_dimensions: [TableName]
+      aws_statistics: [Sum, Average]
+      period_seconds: 300
+      # Note: Replace with actual DynamoDB table names from Bayer account
+
+    - aws_namespace: AWS/DynamoDB
+      aws_metric_name: ConsumedWriteCapacityUnits
+      aws_dimensions: [TableName]
+      aws_statistics: [Sum, Average]
+      period_seconds: 300
+
+    - aws_namespace: AWS/DynamoDB
+      aws_metric_name: ReadThrottleEvents
+      aws_dimensions: [TableName]
+      aws_statistics: [Sum]
+      period_seconds: 300
+
+    - aws_namespace: AWS/DynamoDB
+      aws_metric_name: WriteThrottleEvents
+      aws_dimensions: [TableName]
+      aws_statistics: [Sum]
+      period_seconds: 300
+
+    - aws_namespace: AWS/DynamoDB
+      aws_metric_name: SuccessfulRequestLatency
+      aws_dimensions: [TableName, Operation]
+      aws_statistics: [Average, p50, p90, p99]
+      period_seconds: 300
+
+    - aws_namespace: AWS/DynamoDB
+      aws_metric_name: SystemErrors
+      aws_dimensions: [TableName, Operation]
+      aws_statistics: [Sum]
+      period_seconds: 300
+
+    # ═══════════════════════════════════════════════════════════
+    # TRANSFER FAMILY / SFTP
+    # ═══════════════════════════════════════════════════════════
+    - aws_namespace: AWS/Transfer
+      aws_metric_name: FilesIn
+      aws_dimensions: [ServerId]
+      aws_statistics: [Sum]
+      period_seconds: 300
+
+    - aws_namespace: AWS/Transfer
+      aws_metric_name: FilesOut
+      aws_dimensions: [ServerId]
+      aws_statistics: [Sum]
+      period_seconds: 300
+
+    - aws_namespace: AWS/Transfer
+      aws_metric_name: BytesIn
+      aws_dimensions: [ServerId]
+      aws_statistics: [Sum]
+      period_seconds: 300
+
+    - aws_namespace: AWS/Transfer
+      aws_metric_name: BytesOut
+      aws_dimensions: [ServerId]
+      aws_statistics: [Sum]
+      period_seconds: 300
+
+    # ═══════════════════════════════════════════════════════════
+    # EVENTBRIDGE
+    # ═══════════════════════════════════════════════════════════
+    - aws_namespace: AWS/Events
+      aws_metric_name: TriggeredRules
+      aws_dimensions: [RuleName]
+      aws_statistics: [Sum]
+      period_seconds: 300
+      aws_dimension_select_regex:
+        RuleName:
+          - ".*modeln.*"
+          - ".*bay-modeln.*"
+
+    - aws_namespace: AWS/Events
+      aws_metric_name: Invocations
+      aws_dimensions: [RuleName]
+      aws_statistics: [Sum]
+      period_seconds: 300
+
+    - aws_namespace: AWS/Events
+      aws_metric_name: FailedInvocations
+      aws_dimensions: [RuleName]
+      aws_statistics: [Sum]
+      period_seconds: 300
+
+    # ═══════════════════════════════════════════════════════════
+    # EC2 — RODB Instance
+    # ═══════════════════════════════════════════════════════════
+    - aws_namespace: AWS/EC2
+      aws_metric_name: CPUUtilization
+      aws_dimensions: [InstanceId]
+      aws_statistics: [Average, Maximum]
+      period_seconds: 300
+      aws_tag_select:
+        tag_selections:
+          Name:
+            - RODB-EC2
+
+    - aws_namespace: AWS/EC2
+      aws_metric_name: StatusCheckFailed
+      aws_dimensions: [InstanceId]
+      aws_statistics: [Maximum]
+      period_seconds: 300
+
+    - aws_namespace: AWS/EC2
+      aws_metric_name: NetworkIn
+      aws_dimensions: [InstanceId]
+      aws_statistics: [Sum]
+      period_seconds: 300
+
+    - aws_namespace: AWS/EC2
+      aws_metric_name: NetworkOut
+      aws_dimensions: [InstanceId]
+      aws_statistics: [Sum]
+      period_seconds: 300
+
+    - aws_namespace: AWS/EC2
+      aws_metric_name: DiskReadOps
+      aws_dimensions: [InstanceId]
+      aws_statistics: [Sum]
+      period_seconds: 300
+
+    - aws_namespace: AWS/EC2
+      aws_metric_name: DiskWriteOps
+      aws_dimensions: [InstanceId]
+      aws_statistics: [Sum]
+      period_seconds: 300

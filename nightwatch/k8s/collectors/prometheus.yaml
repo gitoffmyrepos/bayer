@@ -1,0 +1,394 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-config
+  namespace: nightwatch
+  labels:
+    app.kubernetes.io/name: prometheus
+    app.kubernetes.io/part-of: nightwatch-platform
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval: 30s
+      evaluation_interval: 30s
+      scrape_timeout: 20s
+      external_labels:
+        cluster: 'strategybase'
+        environment: 'production'
+        pipeline: 'bayer-modeln'
+
+    # Remote write to VictoriaMetrics for long-term storage
+    remote_write:
+      - url: "http://victoriametrics:8428/api/v1/write"
+        queue_config:
+          capacity: 10000
+          max_shards: 10
+          min_shards: 1
+          max_samples_per_send: 5000
+          batch_send_deadline: 5s
+          max_retries: 3
+          min_backoff: 30ms
+          max_backoff: 100ms
+        write_relabel_configs:
+          - source_labels: [__name__]
+            regex: "go_.*|process_.*"
+            action: drop
+
+    # Alert rules
+    rule_files:
+      - "/etc/prometheus/rules/*.yml"
+
+    # AlertManager
+    alerting:
+      alertmanagers:
+        - static_configs:
+            - targets:
+              - alertmanager:9093
+
+    scrape_configs:
+      # ═══════════════════════════════════════════════════════
+      # Prometheus self-monitoring
+      # ═══════════════════════════════════════════════════════
+      - job_name: 'prometheus'
+        static_configs:
+          - targets: ['localhost:9090']
+
+      # ═══════════════════════════════════════════════════════
+      # Nightwatch AWS Pipeline Collector
+      # ═══════════════════════════════════════════════════════
+      - job_name: 'nightwatch-aws-pipeline-collector'
+        scrape_interval: 30s
+        static_configs:
+          - targets: ['aws-pipeline-collector:8080']
+            labels:
+              component: 'aws-pipeline-collector'
+              pipeline: 'bayer-modeln'
+              env: 'production'
+
+      # ═══════════════════════════════════════════════════════
+      # CloudWatch Exporter (S3, Step Functions, Lambda, DynamoDB)
+      # ═══════════════════════════════════════════════════════
+      - job_name: 'cloudwatch-exporter'
+        scrape_interval: 60s
+        scrape_timeout: 50s
+        static_configs:
+          - targets: ['cloudwatch-exporter:9106']
+            labels:
+              component: 'cloudwatch-exporter'
+              pipeline: 'bayer-modeln'
+
+      # ═══════════════════════════════════════════════════════
+      # Kubernetes node-exporter (infrastructure metrics)
+      # ═══════════════════════════════════════════════════════
+      - job_name: 'node-exporter'
+        scrape_interval: 30s
+        kubernetes_sd_configs:
+          - role: endpoints
+            namespaces:
+              names:
+                - monitoring
+                - nightwatch
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_endpoints_name]
+            regex: node-exporter
+            action: keep
+          - source_labels: [__meta_kubernetes_endpoint_node_name]
+            target_label: node
+          - source_labels: [__meta_kubernetes_namespace]
+            target_label: namespace
+
+      # ═══════════════════════════════════════════════════════
+      # kube-state-metrics (Kubernetes object state)
+      # ═══════════════════════════════════════════════════════
+      - job_name: 'kube-state-metrics'
+        scrape_interval: 30s
+        kubernetes_sd_configs:
+          - role: endpoints
+            namespaces:
+              names:
+                - monitoring
+                - kube-system
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_endpoints_name]
+            regex: kube-state-metrics
+            action: keep
+
+      # ═══════════════════════════════════════════════════════
+      # Kubernetes API Server
+      # ═══════════════════════════════════════════════════════
+      - job_name: 'kubernetes-apiservers'
+        kubernetes_sd_configs:
+          - role: endpoints
+        scheme: https
+        tls_config:
+          ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+        bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_namespace, __meta_kubernetes_service_name, __meta_kubernetes_endpoint_port_name]
+            action: keep
+            regex: default;kubernetes;https
+
+      # ═══════════════════════════════════════════════════════
+      # Kubernetes pods (auto-discover pods with prometheus annotations)
+      # ═══════════════════════════════════════════════════════
+      - job_name: 'kubernetes-pods'
+        kubernetes_sd_configs:
+          - role: pod
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+            action: keep
+            regex: true
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
+            action: replace
+            target_label: __metrics_path__
+            regex: (.+)
+          - source_labels: [__address__, __meta_kubernetes_pod_annotation_prometheus_io_port]
+            action: replace
+            regex: ([^:]+)(?::\d+)?;(\d+)
+            replacement: $1:$2
+            target_label: __address__
+          - action: labelmap
+            regex: __meta_kubernetes_pod_label_(.+)
+          - source_labels: [__meta_kubernetes_namespace]
+            action: replace
+            target_label: kubernetes_namespace
+          - source_labels: [__meta_kubernetes_pod_name]
+            action: replace
+            target_label: kubernetes_pod_name
+
+      # ═══════════════════════════════════════════════════════
+      # Nightwatch internal components
+      # ═══════════════════════════════════════════════════════
+      - job_name: 'otel-collector'
+        static_configs:
+          - targets: ['otel-collector:8888']
+            labels:
+              component: 'otel-collector'
+
+      - job_name: 'fluent-bit'
+        scrape_interval: 30s
+        static_configs:
+          - targets: ['fluent-bit:2020']
+        metrics_path: /api/v1/metrics/prometheus
+
+      - job_name: 'victoriametrics'
+        static_configs:
+          - targets: ['victoriametrics:8428']
+            labels:
+              component: 'victoriametrics'
+
+  # Pipeline alert rules
+  pipeline-alerts.yml: |
+    groups:
+      - name: modeln-pipeline-p1
+        interval: 30s
+        rules:
+          - alert: StepFunctionFailed
+            expr: nightwatch_stepfunction_execution_status{status="FAILED"} > 0
+            for: 5m
+            labels:
+              severity: p1
+              pipeline: bayer-modeln
+              team: platform
+            annotations:
+              summary: "Step Function {{ $labels.state_machine }} FAILED"
+              description: "Execution {{ $labels.execution_name }} has been in FAILED state for > 5 minutes"
+              runbook: "https://wiki.strategybase.io/nightwatch/runbooks/stepfunction-failed"
+
+          - alert: S3LandingNoNewObjects
+            expr: increase(nightwatch_s3_object_count{bucket=~".*landing.*"}[2h]) == 0
+            for: 0m
+            labels:
+              severity: p1
+              pipeline: bayer-modeln
+              team: platform
+            annotations:
+              summary: "No new objects in S3 landing bucket for 2+ hours"
+              description: "Bucket {{ $labels.bucket }} prefix {{ $labels.prefix }} has received no new objects in 2 hours during expected processing window"
+
+          - alert: OutboundSFTPDeliveryFailed
+            expr: nightwatch_sftp_transfer_count{direction="outbound"} == 0
+            for: 30m
+            labels:
+              severity: p1
+              pipeline: bayer-modeln
+              team: platform
+            annotations:
+              summary: "Outbound SFTP delivery failed — McKesson/AXWAY SLA breach risk"
+              description: "No outbound SFTP transfers in the last 30 minutes during expected delivery window"
+
+      - name: modeln-pipeline-p2
+        interval: 60s
+        rules:
+          - alert: GlueJobDurationAnomaly
+            expr: nightwatch_glue_job_duration_seconds > (avg_over_time(nightwatch_glue_job_duration_seconds[7d]) * 2)
+            for: 5m
+            labels:
+              severity: p2
+              pipeline: bayer-modeln
+            annotations:
+              summary: "Glue job {{ $labels.job_name }} running > 2x historical average"
+              description: "Current duration {{ $value }}s is more than 2x the 7-day average"
+
+          - alert: GlueJobFailed
+            expr: nightwatch_glue_job_status{status="FAILED"} > 0
+            for: 1m
+            labels:
+              severity: p2
+              pipeline: bayer-modeln
+            annotations:
+              summary: "Glue job {{ $labels.job_name }} FAILED"
+              description: "Glue ETL job has failed. Check logs for root cause."
+
+      - name: modeln-pipeline-p3
+        interval: 60s
+        rules:
+          - alert: LambdaHighErrorRate
+            expr: |
+              (
+                rate(aws_lambda_errors_sum{function_name=~"bay-modeln.*"}[15m]) /
+                rate(aws_lambda_invocations_sum{function_name=~"bay-modeln.*"}[15m])
+              ) > 0.05
+            for: 5m
+            labels:
+              severity: p3
+              pipeline: bayer-modeln
+            annotations:
+              summary: "Lambda {{ $labels.function_name }} error rate > 5%"
+              description: "Error rate is {{ $value | humanizePercentage }} over the last 15 minutes"
+
+          - alert: DynamoDBHighReadLatency
+            expr: aws_dynamodb_successful_request_latency_p99{operation="GetItem"} > 100
+            for: 10m
+            labels:
+              severity: p3
+              pipeline: bayer-modeln
+            annotations:
+              summary: "DynamoDB {{ $labels.table_name }} p99 read latency > 100ms"
+              description: "p99 latency is {{ $value }}ms — reference data reads are slow"
+
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: prometheus
+  namespace: nightwatch
+  labels:
+    app.kubernetes.io/name: prometheus
+    app.kubernetes.io/part-of: nightwatch-platform
+    app: prometheus
+spec:
+  serviceName: prometheus
+  replicas: 1
+  selector:
+    matchLabels:
+      app: prometheus
+  template:
+    metadata:
+      labels:
+        app: prometheus
+        app.kubernetes.io/name: prometheus
+        app.kubernetes.io/part-of: nightwatch-platform
+    spec:
+      serviceAccountName: nightwatch-collector
+      securityContext:
+        fsGroup: 65534
+        runAsUser: 65534
+        runAsNonRoot: true
+      initContainers:
+        - name: init-chown-data
+          image: busybox:1.36
+          command: ["chown", "-R", "65534:65534", "/prometheus"]
+          volumeMounts:
+            - name: prometheus-data
+              mountPath: /prometheus
+          securityContext:
+            runAsUser: 0
+      containers:
+        - name: prometheus
+          image: prom/prometheus:v2.51.0
+          args:
+            - "--config.file=/etc/prometheus/prometheus.yml"
+            - "--storage.tsdb.path=/prometheus"
+            - "--storage.tsdb.retention.time=7d"
+            - "--storage.tsdb.retention.size=20GB"
+            - "--web.console.libraries=/usr/share/prometheus/console_libraries"
+            - "--web.console.templates=/usr/share/prometheus/consoles"
+            - "--web.enable-lifecycle"
+            - "--web.enable-admin-api"
+            - "--query.max-concurrency=20"
+            - "--log.level=info"
+          ports:
+            - name: web
+              containerPort: 9090
+              protocol: TCP
+          volumeMounts:
+            - name: prometheus-config
+              mountPath: /etc/prometheus
+              readOnly: true
+            - name: prometheus-rules
+              mountPath: /etc/prometheus/rules
+              readOnly: true
+            - name: prometheus-data
+              mountPath: /prometheus
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "1Gi"
+            limits:
+              cpu: "2"
+              memory: "4Gi"
+          livenessProbe:
+            httpGet:
+              path: /-/healthy
+              port: 9090
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            failureThreshold: 5
+          readinessProbe:
+            httpGet:
+              path: /-/ready
+              port: 9090
+            initialDelaySeconds: 30
+            periodSeconds: 15
+      volumes:
+        - name: prometheus-config
+          configMap:
+            name: prometheus-config
+        - name: prometheus-rules
+          configMap:
+            name: prometheus-config
+            items:
+              - key: pipeline-alerts.yml
+                path: pipeline-alerts.yml
+  volumeClaimTemplates:
+    - metadata:
+        name: prometheus-data
+        labels:
+          app.kubernetes.io/part-of: nightwatch-platform
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 20Gi
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: prometheus
+  namespace: nightwatch
+  labels:
+    app.kubernetes.io/name: prometheus
+    app.kubernetes.io/part-of: nightwatch-platform
+    app: prometheus
+spec:
+  selector:
+    app: prometheus
+  ports:
+    - name: web
+      port: 9090
+      targetPort: 9090
+      protocol: TCP
+  type: ClusterIP

@@ -1,0 +1,305 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: otel-collector-config
+  namespace: nightwatch
+  labels:
+    app.kubernetes.io/name: otel-collector
+    app.kubernetes.io/part-of: nightwatch-platform
+data:
+  otel-collector-config.yaml: |
+    receivers:
+      # OTLP gRPC receiver
+      otlp:
+        protocols:
+          grpc:
+            endpoint: 0.0.0.0:4317
+          http:
+            endpoint: 0.0.0.0:4318
+
+      # Prometheus scrape receiver (scrapes /metrics endpoints)
+      prometheus:
+        config:
+          scrape_configs:
+            - job_name: 'aws-pipeline-collector'
+              scrape_interval: 30s
+              static_configs:
+                - targets: ['aws-pipeline-collector:8080']
+                  labels:
+                    component: 'nightwatch-aws-collector'
+                    pipeline: 'bayer-modeln'
+
+            - job_name: 'cloudwatch-exporter'
+              scrape_interval: 60s
+              static_configs:
+                - targets: ['cloudwatch-exporter:9106']
+                  labels:
+                    component: 'cloudwatch-exporter'
+                    pipeline: 'bayer-modeln'
+
+            - job_name: 'otel-collector-self'
+              scrape_interval: 30s
+              static_configs:
+                - targets: ['localhost:8888']
+
+      # Prometheus remote write receiver (Prometheus pushes here)
+      prometheusremotewrite:
+        endpoint: 0.0.0.0:9090
+
+      # Host metrics (k8s node metrics)
+      hostmetrics:
+        collection_interval: 30s
+        scrapers:
+          cpu:
+          memory:
+          disk:
+          filesystem:
+          network:
+          load:
+
+    processors:
+      # Memory limiter to prevent OOM
+      memory_limiter:
+        check_interval: 1s
+        limit_percentage: 75
+        spike_limit_percentage: 30
+
+      # Batch processor for efficiency
+      batch:
+        send_batch_size: 1000
+        send_batch_max_size: 2000
+        timeout: 5s
+
+      # Add resource attributes
+      resource:
+        attributes:
+          - key: deployment.environment
+            value: "production"
+            action: upsert
+          - key: service.namespace
+            value: "nightwatch"
+            action: upsert
+          - key: pipeline.name
+            value: "bayer-modeln"
+            action: upsert
+
+      # Attribute transformation
+      attributes:
+        actions:
+          - key: k8s.pod.namespace
+            from_attribute: namespace
+            action: insert
+
+      # Filter out noisy metrics
+      filter:
+        metrics:
+          exclude:
+            match_type: regexp
+            metric_names:
+              - "go_.*_gc_.*"
+              - "process_.*_total"
+
+    exporters:
+      # VictoriaMetrics remote write (Prometheus-compatible)
+      prometheusremotewrite/victoriametrics:
+        endpoint: "http://victoriametrics:8428/api/v1/write"
+        tls:
+          insecure: true
+        resource_to_telemetry_conversion:
+          enabled: true
+        send_metadata: true
+        timeout: 30s
+        retry_on_failure:
+          enabled: true
+          initial_interval: 5s
+          max_interval: 30s
+          max_elapsed_time: 300s
+
+      # OpenSearch logs exporter
+      opensearch:
+        endpoint: "http://opensearch:9200"
+        index: "nightwatch-otel-%{yyyy.MM.dd}"
+        pipeline: "nightwatch-ingest"
+        timeout: 30s
+        retry:
+          enabled: true
+          initial_interval: 1s
+          max_interval: 30s
+          max_elapsed_time: 300s
+
+      # Prometheus exposition endpoint (self-scrape)
+      prometheus:
+        endpoint: "0.0.0.0:8889"
+        resource_to_telemetry_conversion:
+          enabled: true
+
+      # Debug logging (disable in prod by setting verbosity to basic)
+      logging:
+        verbosity: basic
+        sampling_initial: 5
+        sampling_thereafter: 200
+
+    extensions:
+      # Health check endpoint
+      health_check:
+        endpoint: 0.0.0.0:13133
+
+      # pprof profiling endpoint
+      pprof:
+        endpoint: 0.0.0.0:1777
+
+      # zpages for observability
+      zpages:
+        endpoint: 0.0.0.0:55679
+
+    service:
+      extensions: [health_check, pprof, zpages]
+      pipelines:
+        # Metrics pipeline: collect → process → store
+        metrics:
+          receivers: [otlp, prometheus, hostmetrics]
+          processors: [memory_limiter, resource, attributes, batch]
+          exporters: [prometheusremotewrite/victoriametrics, prometheus]
+
+        # Logs pipeline: collect → process → store
+        logs:
+          receivers: [otlp]
+          processors: [memory_limiter, resource, batch]
+          exporters: [opensearch, logging]
+
+        # Traces pipeline: collect → process → store
+        traces:
+          receivers: [otlp]
+          processors: [memory_limiter, resource, batch]
+          exporters: [opensearch, logging]
+
+      telemetry:
+        logs:
+          level: "info"
+        metrics:
+          address: 0.0.0.0:8888
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: otel-collector
+  namespace: nightwatch
+  labels:
+    app.kubernetes.io/name: otel-collector
+    app.kubernetes.io/part-of: nightwatch-platform
+    app: otel-collector
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: otel-collector
+  template:
+    metadata:
+      labels:
+        app: otel-collector
+        app.kubernetes.io/name: otel-collector
+        app.kubernetes.io/part-of: nightwatch-platform
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8888"
+    spec:
+      serviceAccountName: nightwatch-collector
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        fsGroup: 10001
+      containers:
+        - name: otel-collector
+          image: otel/opentelemetry-collector-contrib:0.96.0
+          args:
+            - "--config=/etc/otel-collector/otel-collector-config.yaml"
+          ports:
+            - name: otlp-grpc
+              containerPort: 4317
+              protocol: TCP
+            - name: otlp-http
+              containerPort: 4318
+              protocol: TCP
+            - name: prometheus
+              containerPort: 8889
+              protocol: TCP
+            - name: metrics
+              containerPort: 8888
+              protocol: TCP
+            - name: health
+              containerPort: 13133
+              protocol: TCP
+            - name: zpages
+              containerPort: 55679
+              protocol: TCP
+          env:
+            - name: MY_POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+          volumeMounts:
+            - name: otel-config
+              mountPath: /etc/otel-collector
+              readOnly: true
+          resources:
+            requests:
+              cpu: "200m"
+              memory: "256Mi"
+            limits:
+              cpu: "1"
+              memory: "1Gi"
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 13133
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 13133
+            initialDelaySeconds: 10
+            periodSeconds: 10
+      volumes:
+        - name: otel-config
+          configMap:
+            name: otel-collector-config
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: otel-collector
+  namespace: nightwatch
+  labels:
+    app.kubernetes.io/name: otel-collector
+    app.kubernetes.io/part-of: nightwatch-platform
+    app: otel-collector
+spec:
+  selector:
+    app: otel-collector
+  ports:
+    - name: otlp-grpc
+      port: 4317
+      targetPort: 4317
+      protocol: TCP
+    - name: otlp-http
+      port: 4318
+      targetPort: 4318
+      protocol: TCP
+    - name: prometheus
+      port: 8889
+      targetPort: 8889
+      protocol: TCP
+    - name: metrics
+      port: 8888
+      targetPort: 8888
+      protocol: TCP
+    - name: zpages
+      port: 55679
+      targetPort: 55679
+      protocol: TCP
+  type: ClusterIP
