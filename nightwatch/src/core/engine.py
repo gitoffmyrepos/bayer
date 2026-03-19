@@ -64,20 +64,36 @@ class Incident:
         return (end - self.started_at).total_seconds()
 
     def to_dict(self) -> dict:
+        # Primary component + message for UI table
+        primary = self.failing_checks[0] if self.failing_checks else None
+        component = primary.component if primary else self.adapter_name
+        message = primary.message if len(self.failing_checks) == 1 else self.title
         return {
             "id": self.id,
+            # UI reads both 'adapter' and 'adapter_name'
+            "adapter": self.adapter_name,
             "adapter_name": self.adapter_name,
             "title": self.title,
             "severity": self.severity,
+            # UI reads these fields directly in IncidentRow
+            "component": component,
+            "message": message,
+            "status": "active" if self.is_active else "resolved",
+            "is_active": self.is_active,
             "failing_checks": [
-                {"name": c.name, "status": c.status.value, "message": c.message}
+                {"name": c.name, "status": c.status.value,
+                 "message": c.message, "component": c.component}
                 for c in self.failing_checks
             ],
             "started_at": self.started_at.isoformat(),
             "resolved_at": self.resolved_at.isoformat() if self.resolved_at else None,
             "duration_seconds": self.duration_seconds,
-            "is_active": self.is_active,
             "diagnosis": self.diagnosis,
+            # UI reads ai_analysis directly
+            "ai_analysis": (
+                self.diagnosis.get("root_cause", "") +
+                (" | " + self.diagnosis.get("recommendation", "") if self.diagnosis.get("recommendation") else "")
+            ) if self.diagnosis else "",
             "alert_sent": self.alert_sent,
         }
 
@@ -291,7 +307,7 @@ class NightwatchEngine:
             application=incident.adapter_name,
             metadata=metadata,
             incident_id=incident.id,
-            dedup_key=f"{incident.adapter_name}-{incident.title}",
+            dedup_key=f"{incident.adapter_name}-{'-'.join(sorted(c.name for c in incident.failing_checks))}",
         )
 
     # ─── Status / History ─────────────────────────────────────────────────────
@@ -343,16 +359,46 @@ class NightwatchEngine:
         overall: str,
         incident: Optional[Incident],
     ) -> dict:
+        # Group checks by component to build the component list the UI AdapterCard reads
+        components_map: dict = {}
+        for c in health_checks:
+            comp_key = c.component or "General"
+            if comp_key not in components_map:
+                components_map[comp_key] = {
+                    "name": comp_key,
+                    "type": "service",
+                    "status": "healthy",
+                    "last_seen": datetime.now(timezone.utc).isoformat(),
+                    "checks": [],
+                }
+            entry = components_map[comp_key]
+            entry["checks"].append({
+                "name": c.name, "status": c.status.value, "message": c.message
+            })
+            # Downgrade component status if any check is failing
+            if c.status == CheckStatus.FAIL:
+                entry["status"] = "unhealthy"
+            elif c.status == CheckStatus.WARN and entry["status"] == "healthy":
+                entry["status"] = "degraded"
+
         return {
             "status": overall,
             "application": self.adapter.application_name,
             "last_check": self._last_check.isoformat() if self._last_check else None,
             "check_count": self._check_count,
             "consecutive_failures": self._consecutive_failures,
+            # Flat list for raw access
             "health_checks": [
-                {"name": c.name, "status": c.status.value, "message": c.message, "component": c.component}
+                {"name": c.name, "status": c.status.value,
+                 "message": c.message, "component": c.component}
                 for c in health_checks
             ],
+            # Nested structure the UI AdapterCard reads: data.details.components
+            "details": {
+                "components": list(components_map.values()),
+                "total_checks": len(health_checks),
+                "failing_checks": sum(1 for c in health_checks if c.status.value in ("fail", "warn")),
+            },
             "metrics_summary": {k: v for k, v in list(metrics.items())[:10]},
             "active_incident": incident.to_dict() if incident else None,
         }
