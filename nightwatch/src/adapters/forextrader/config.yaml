@@ -50,7 +50,9 @@ thresholds:
   min_pods_running: 10
 
   # Pod restart count threshold for crash-loop detection
-  max_pod_restarts: 5
+  # Note: DaemonSets accumulate 100s of restarts over months — only alert on high counts
+  # that indicate ACTIVE crashlooping, not historical restarts from node reboots
+  max_pod_restarts: 50
 
   # Minimum OANDA balance before warning (demo account: $90,000)
   min_balance: 90000
