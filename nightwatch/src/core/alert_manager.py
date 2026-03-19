@@ -211,9 +211,14 @@ class AlertManager:
         for k, v in list(metadata.items())[:5]:
             fields.append({"name": k.replace("_", " ").title(), "value": f"```{str(v)[:100]}```", "inline": False})
 
+        # Mention Nova (or configured user) on critical/high alerts so she gets pinged
+        mention_user_id = self.discord_config.get("mention_user_id", "")
+        mention_content = f"<@{mention_user_id}> " if mention_user_id and severity in ("critical", "high") else ""
+
         payload = {
             "username": "Nightwatch ⚡",
             "avatar_url": "https://em-content.zobj.net/source/openmoji/338/eye_1f441.png",
+            "content": f"{mention_content}",
             "embeds": [{
                 "title": f"{emoji} {title}",
                 "description": body[:2000],
