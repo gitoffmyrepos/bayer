@@ -213,12 +213,18 @@ class AlertManager:
 
         # Mention Nova (or configured user) on critical/high alerts so she gets pinged
         mention_user_id = self.discord_config.get("mention_user_id", "")
-        mention_content = f"<@{mention_user_id}> " if mention_user_id and severity in ("critical", "high") else ""
+        mention_prefix = f"<@{mention_user_id}> " if mention_user_id and severity in ("critical", "high") else ""
+
+        # Include a plain-text summary in `content` so AI assistants (OpenClaw/Nova)
+        # that read the content field (not embeds) see the actual alert text.
+        # Format: @mention 🔴 CRITICAL | Title — brief body excerpt
+        body_excerpt = body[:200].replace("\n", " ")
+        content_summary = f"{mention_prefix}{emoji} **{severity.upper()}** | {title} — {body_excerpt}"
 
         payload = {
             "username": "Nightwatch ⚡",
             "avatar_url": "https://em-content.zobj.net/source/openmoji/338/eye_1f441.png",
-            "content": f"{mention_content}",
+            "content": content_summary,
             "embeds": [{
                 "title": f"{emoji} {title}",
                 "description": body[:2000],
