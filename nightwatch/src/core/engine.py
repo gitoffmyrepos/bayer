@@ -307,7 +307,7 @@ class NightwatchEngine:
             application=incident.adapter_name,
             metadata=metadata,
             incident_id=incident.id,
-            dedup_key=f"{incident.adapter_name}-{'-'.join(sorted(c.name for c in incident.failing_checks))}",
+            dedup_key=f"{incident.adapter_name}-{incident.severity}",
         )
 
     # ─── Status / History ─────────────────────────────────────────────────────
