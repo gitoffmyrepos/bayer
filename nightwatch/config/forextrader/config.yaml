@@ -13,27 +13,70 @@
 k8s_namespace: prod-forex
 # kubeconfig_path: /path/to/kubeconfig  # Optional: defaults to ~/.kube/config
 
-# Critical deployments to check for replica readiness
+# Critical deployments to check for replica readiness (verified against live cluster)
 critical_deployments:
-  - forextrader-ml-trainer
-  - forextrader-rl-agents
+  # Core trading pipeline
   - forextrader-api-gateway
-  - forextrader-data-ingestion
-  - forextrader-prediction-engine
+  - forextrader-data-collector
+  - forextrader-signal-generator
   - forextrader-risk-manager
+  - forextrader-trade-executor
+  # ML stack
+  - forextrader-ml-predictor
+  - forextrader-ml-trainer
+  - forextrader-feature-engineering
+  # Data quality + observability
+  - forextrader-data-quality
+  - forextrader-notification-service
+  - forextrader-audit-logger
+  # User-facing
+  - forextrader-frontend
+  - streamlit-dashboard
 
 # OANDA broker API
 oanda_api_url: https://api-fxtrade.oanda.com  # Use https://api-fxpractice.oanda.com for demo
 oanda_account_id: ${OANDA_ACCOUNT_ID}
 oanda_api_key: ${OANDA_API_KEY}
 
-# API health endpoints
+# API health endpoints — external (public) + internal (in-cluster)
 health_endpoints:
-  - name: ForexTrader API Gateway
+  # External endpoints
+  - name: API Gateway (external)
     url: https://forex.strategybase.io/api/health
     expected_status: 200
-  - name: ForexTrader Frontend
+  - name: Frontend (external)
     url: https://forex.strategybase.io
+    expected_status: 200
+  - name: Streamlit Dashboard
+    url: https://streamlit.strategybase.io
+    expected_status: 200
+  # Internal microservice health checks (in-cluster DNS)
+  - name: ML Predictor
+    url: http://forextrader-ml-predictor.prod-forex.svc.cluster.local:8000/health
+    expected_status: 200
+  - name: ML Trainer
+    url: http://forextrader-ml-trainer.prod-forex.svc.cluster.local:8000/health
+    expected_status: 200
+  - name: Data Collector
+    url: http://forextrader-data-collector.prod-forex.svc.cluster.local:8000/health
+    expected_status: 200
+  - name: Signal Generator
+    url: http://forextrader-signal-generator.prod-forex.svc.cluster.local:8000/health
+    expected_status: 200
+  - name: Risk Manager
+    url: http://forextrader-risk-manager.prod-forex.svc.cluster.local:8080/health
+    expected_status: 200
+  - name: Trade Executor
+    url: http://forextrader-trade-executor.prod-forex.svc.cluster.local:8000/health
+    expected_status: 200
+  - name: Feature Engineering
+    url: http://forextrader-feature-engineering.prod-forex.svc.cluster.local:8000/health
+    expected_status: 200
+  - name: Data Quality
+    url: http://forextrader-data-quality.prod-forex.svc.cluster.local:8000/health
+    expected_status: 200
+  - name: Notification Service
+    url: http://forextrader-notification-service.prod-forex.svc.cluster.local:8000/health
     expected_status: 200
 
 # Jenkins CI (optional — tracks build health)
@@ -44,10 +87,28 @@ jenkins_jobs:
   - ForexTrader/tier-0-ml-framework-base/master
   - ForexTrader/forextrader-api/master
 
+# Additional K8s monitoring
+# StatefulSets to monitor (databases, message brokers)
+statefulsets:
+  namespace: prod-forex
+  names:
+    - timescaledb-cluster
+    - redis-master-forex
+    - redpanda
+    - mongodb
+    - qdrant
+
+# Cluster namespaces to monitor
+monitor_namespaces:
+  - prod-forex
+  - nightwatch
+  - argocd
+  - monitoring
+
 # Health check thresholds
 thresholds:
   # Minimum number of running pods before alerting
-  min_pods_running: 10
+  min_pods_running: 20
 
   # Pod restart count threshold for crash-loop detection
   max_pod_restarts: 5
@@ -59,4 +120,11 @@ thresholds:
   max_drawdown_pct: 10.0
 
   # Maximum API response time in milliseconds
-  max_api_response_ms: 2000
+  max_api_response_ms: 3000
+
+  # Node ready threshold
+  min_nodes_ready: 3
+
+  # Nodes to exclude from readiness alerts (e.g. known-offline, decommissioned)
+  excluded_nodes:
+    - pi5-arm64-kaniko-02

@@ -163,6 +163,7 @@ class ForexTraderAdapter(BaseNightwatchAdapter):
         self.max_drawdown_pct = thresholds.get("max_drawdown_pct", 10.0)
         self.max_api_response_ms = thresholds.get("max_api_response_ms", 3000)
         self.min_nodes_ready = thresholds.get("min_nodes_ready", 3)
+        self.excluded_nodes = set(thresholds.get("excluded_nodes", []))
 
     # ─── Data Collection ──────────────────────────────────────────────────────
 
@@ -371,13 +372,25 @@ class ForexTraderAdapter(BaseNightwatchAdapter):
         not_ready = node_data.get("not_ready", 0)
 
         if not_ready > 0:
-            not_ready_names = [n["name"] for n in node_data.get("nodes", []) if not n.get("ready")]
-            checks.append(self._fail(
-                "k8s_nodes_ready",
-                f"{not_ready}/{total} node(s) NOT Ready: {', '.join(not_ready_names)}",
-                component="Cluster",
-                not_ready=not_ready, total=total,
-            ))
+            all_not_ready = [n["name"] for n in node_data.get("nodes", []) if not n.get("ready")]
+            not_ready_names = [n for n in all_not_ready if n not in self.excluded_nodes]
+            excluded_down = [n for n in all_not_ready if n in self.excluded_nodes]
+            if not_ready_names:
+                checks.append(self._fail(
+                    "k8s_nodes_ready",
+                    f"{len(not_ready_names)}/{total} node(s) NOT Ready: {', '.join(not_ready_names)}"
+                    + (f" (excluded: {', '.join(excluded_down)})" if excluded_down else ""),
+                    component="Cluster",
+                    not_ready=len(not_ready_names), total=total,
+                ))
+            else:
+                checks.append(self._ok(
+                    "k8s_nodes_ready",
+                    f"{total - len(all_not_ready)}/{total} nodes Ready"
+                    + (f" (excluded offline: {', '.join(excluded_down)})" if excluded_down else ""),
+                    component="Cluster",
+                    ready=ready, total=total,
+                ))
         else:
             checks.append(self._ok(
                 "k8s_nodes_ready",
