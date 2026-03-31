@@ -15,6 +15,7 @@ Author: Nova ⚡ | Nightwatch Platform
 """
 
 import json
+import os
 import smtplib
 import ssl
 from datetime import datetime, timezone
@@ -24,6 +25,12 @@ from typing import Optional
 
 import httpx
 import structlog
+
+# Bot API — used to send a plain-text @mention after the webhook embed so
+# OpenClaw/Nova actually gets triggered (webhooks don't fire bot mention events).
+DISCORD_API_BASE = "https://discord.com/api/v10"
+DISCORD_BOT_TOKEN = os.getenv("DISCORD_BOT_TOKEN", "")
+DISCORD_CHANNEL_ID = os.getenv("DISCORD_CHANNEL_ID", "")
 
 log = structlog.get_logger("nightwatch.alerting")
 
@@ -240,7 +247,38 @@ class AlertManager:
             response.raise_for_status()
 
         log.info("discord_alert_sent", title=title)
+
+        # After the webhook embed, fire a plain Bot API message containing the
+        # @mention so OpenClaw/Nova actually receives a mention event and wakes up.
+        # Webhooks post as a different "user" and don't trigger bot mention listeners.
+        if DISCORD_BOT_TOKEN and DISCORD_CHANNEL_ID and mention_user_id and severity in ("critical", "high"):
+            await self._send_bot_mention(mention_user_id, title, severity, emoji)
+
         return True
+
+    async def _send_bot_mention(
+        self,
+        mention_user_id: str,
+        title: str,
+        severity: str,
+        emoji: str,
+    ) -> None:
+        """Send a plain-text Bot API message so the @mention actually triggers OpenClaw."""
+        content = f"<@{mention_user_id}> {emoji} **{severity.upper()}** | {title}"
+        url = f"{DISCORD_API_BASE}/channels/{DISCORD_CHANNEL_ID}/messages"
+        headers = {
+            "Authorization": f"Bot {DISCORD_BOT_TOKEN}",
+            "Content-Type": "application/json",
+        }
+        try:
+            async with httpx.AsyncClient(timeout=10) as client:
+                resp = await client.post(url, json={"content": content}, headers=headers)
+            if resp.status_code in (200, 201):
+                log.info("discord_bot_mention_sent", severity=severity, title=title)
+            else:
+                log.warning("discord_bot_mention_failed", status=resp.status_code, body=resp.text[:200])
+        except Exception as exc:
+            log.warning("discord_bot_mention_error", error=str(exc))
 
     # ─── PagerDuty ───────────────────────────────────────────────────────────
 
