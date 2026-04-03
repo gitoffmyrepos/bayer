@@ -1,105 +1,43 @@
 # ============================================================================
-# Nightwatch Master Configuration
+# Nightwatch Master Configuration — ForexTrader Test Deployment
 # ============================================================================
-# Cloud-agnostic AI monitoring platform.
-# All ${ENV_VAR} values are substituted from environment variables at startup.
-# ============================================================================
-
 nightwatch:
-  # How often to run each check cycle (seconds)
   check_interval_seconds: 60
-
-  # Keep last N incidents in memory
   max_incidents_history: 100
-
-  # Enable AI root cause analysis when checks fail
   enable_ai_diagnosis: true
-
-  # Which severities trigger alerts (critical, high, medium, low)
   alert_severities:
     - critical
     - high
 
-# ─── LLM Provider ────────────────────────────────────────────────────────────
-# Switch provider with a single config change.
-# Available: anthropic | openai | deepseek | ollama
-
+# ─── LLM Provider ─────────────────────────────────────────────────────────────
 llm:
-  provider: anthropic                    # Change to: openai | deepseek | ollama
-  model: claude-3-haiku-20240307         # Fast + cheap for monitoring
+  provider: anthropic
+  model: claude-haiku-4-5
   api_key: ${ANTHROPIC_API_KEY}
   max_tokens: 1024
-  temperature: 0.1                       # Low temperature = consistent analysis
+  temperature: 0.1
   timeout_seconds: 30
 
-  # ── OpenAI example ──
-  # provider: openai
-  # model: gpt-4o-mini
-  # api_key: ${OPENAI_API_KEY}
-
-  # ── DeepSeek example (OpenAI-compatible, cheapest) ──
-  # provider: deepseek
-  # model: deepseek-chat
-  # api_key: ${DEEPSEEK_API_KEY}
-
-  # ── Ollama (local, fully private, no API cost) ──
-  # provider: ollama
-  # model: qwen3:14b
-  # base_url: http://ollama.strategybase.io:11434
-
 # ─── Application Adapters ─────────────────────────────────────────────────────
-# Each adapter monitors one application. Add more to monitor more apps.
-# Built-in types: aws_pipeline | forextrader
-# Custom types: implement BaseNightwatchAdapter and register in src/api/main.py
-
 adapters:
-  - name: bayer-modeln
-    type: aws_pipeline
-    config_file: aws_pipeline/config.yaml    # Relative to config/ dir
+  - name: forextrader
+    type: forextrader
+    config_file: forextrader/config.yaml
     enabled: true
 
-  # ── ForexTrader adapter (uncomment to enable) ──
-  # - name: forextrader
-  #   type: forextrader
-  #   config_file: forextrader/config.yaml
-  #   enabled: false
-
 # ─── Alerting ─────────────────────────────────────────────────────────────────
-# Configure alert destinations. All channels are optional.
-# Deduplication: same alert won't fire more than once per dedup_window_seconds.
-
 alerting:
-  dedup_window_seconds: 300              # 5 minutes between identical alerts
-
-  slack:
-    webhook_url: ${SLACK_WEBHOOK_URL}    # https://hooks.slack.com/services/...
-    channel: "#nightwatch-incidents"
-
+  dedup_window_seconds: 300
   discord:
-    webhook_url: ${DISCORD_WEBHOOK_URL}  # https://discord.com/api/webhooks/...
+    webhook_url: ${DISCORD_WEBHOOK_URL}
 
-  pagerduty:
-    routing_key: ${PAGERDUTY_ROUTING_KEY}  # Optional: PagerDuty Events API v2
-
-  email:
-    smtp_host: ${SMTP_HOST}              # e.g., smtp.gmail.com
-    smtp_port: 587
-    from: nightwatch@monitoring.local
-    to: ${ALERT_EMAIL}
-    username: ${SMTP_USERNAME}
-    password: ${SMTP_PASSWORD}
-
-# ─── Auto-Healing (EXPERIMENTAL) ─────────────────────────────────────────────
-# Allows Nightwatch to suggest and optionally execute remediation commands.
-# SAFETY: mode=suggest_only by default. Enable auto modes with caution!
-
+# ─── Auto-Healing ─────────────────────────────────────────────────────────────
 healing:
-  mode: suggest_only          # suggest_only | auto_low_risk | auto_medium_risk | disabled
-  dry_run: true               # true = never execute, just show what would run
+  mode: suggest_only
+  dry_run: true
   allowed_actions:
     - k8s_restart_pod
     - k8s_scale_up
-    - clear_jenkins_cache
 
 # ─── API ──────────────────────────────────────────────────────────────────────
 api:

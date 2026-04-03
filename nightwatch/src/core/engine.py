@@ -241,7 +241,7 @@ class NightwatchEngine:
         except asyncio.CancelledError:
             raise
         except Exception as e:
-            log.error("check_cycle_error", cycle=cycle_id, error=str(e), exc_info=True)
+            log.error("check_cycle_error", cycle=cycle_id, error=str(e))
             self._consecutive_failures += 1
             return {"status": "error", "error": str(e), "cycle": cycle_id}
 

@@ -90,6 +90,197 @@ def collect_k8s_pod_status(k8s_namespace: str, kubeconfig_path: Optional[str] = 
         return {"error": str(e)}
 
 
+def collect_k8s_all_deployments(k8s_namespace: str,
+                                kubeconfig_path: Optional[str] = None) -> dict:
+    """
+    Collect status of ALL deployments in a namespace.
+    Returns per-deployment ready/desired/restarts so we can build a full component map.
+    """
+    try:
+        from kubernetes import client, config as k8s_config
+
+        if kubeconfig_path:
+            k8s_config.load_kube_config(config_file=kubeconfig_path)
+        else:
+            try:
+                k8s_config.load_incluster_config()
+            except Exception:
+                k8s_config.load_kube_config()
+
+        apps_v1 = client.AppsV1Api()
+        deploys = apps_v1.list_namespaced_deployment(namespace=k8s_namespace)
+        result = {}
+        for d in deploys.items:
+            name = d.metadata.name
+            spec_replicas = d.spec.replicas or 0
+            ready = d.status.ready_replicas or 0
+            available = d.status.available_replicas or 0
+            if spec_replicas == 0:
+                status = "scaled_down"
+            elif ready >= spec_replicas:
+                status = "healthy"
+            elif ready > 0:
+                status = "degraded"
+            else:
+                status = "unhealthy"
+            result[name] = {
+                "desired": spec_replicas,
+                "ready": ready,
+                "available": available,
+                "status": status,
+            }
+        return result
+    except Exception as e:
+        log.error("collect_all_deployments_error", error=str(e))
+        return {"error": str(e)}
+
+
+def collect_k8s_nodes(kubeconfig_path: Optional[str] = None) -> dict:
+    """
+    Collect Kubernetes node health: Ready status, CPU/memory pressure, disk pressure.
+    """
+    try:
+        from kubernetes import client, config as k8s_config
+
+        if kubeconfig_path:
+            k8s_config.load_kube_config(config_file=kubeconfig_path)
+        else:
+            try:
+                k8s_config.load_incluster_config()
+            except Exception:
+                k8s_config.load_kube_config()
+
+        v1 = client.CoreV1Api()
+        nodes = v1.list_node()
+        node_data = []
+        ready_count = 0
+        for node in nodes.items:
+            name = node.metadata.name
+            roles = []
+            for label in node.metadata.labels or {}:
+                if label.startswith("node-role.kubernetes.io/"):
+                    roles.append(label.split("/", 1)[1])
+            conditions = {c.type: c.status for c in (node.status.conditions or [])}
+            is_ready = conditions.get("Ready") == "True"
+            if is_ready:
+                ready_count += 1
+            node_data.append({
+                "name": name,
+                "ready": is_ready,
+                "roles": roles,
+                "memory_pressure": conditions.get("MemoryPressure") == "True",
+                "disk_pressure": conditions.get("DiskPressure") == "True",
+                "pid_pressure": conditions.get("PIDPressure") == "True",
+                "cpu": node.status.capacity.get("cpu") if node.status.capacity else None,
+                "memory": node.status.capacity.get("memory") if node.status.capacity else None,
+            })
+        return {
+            "total": len(node_data),
+            "ready": ready_count,
+            "not_ready": len(node_data) - ready_count,
+            "nodes": node_data,
+        }
+    except Exception as e:
+        log.error("collect_k8s_nodes_error", error=str(e))
+        return {"error": str(e)}
+
+
+def collect_k8s_statefulsets(k8s_namespace: str, names: list[str],
+                             kubeconfig_path: Optional[str] = None) -> dict:
+    """
+    Collect StatefulSet health (databases, message brokers).
+    """
+    try:
+        from kubernetes import client, config as k8s_config
+
+        if kubeconfig_path:
+            k8s_config.load_kube_config(config_file=kubeconfig_path)
+        else:
+            try:
+                k8s_config.load_incluster_config()
+            except Exception:
+                k8s_config.load_kube_config()
+
+        apps_v1 = client.AppsV1Api()
+        result = {}
+
+        # Try exact names first, fall back to listing all and matching prefixes
+        all_sts = apps_v1.list_namespaced_stateful_set(namespace=k8s_namespace)
+        sts_map = {s.metadata.name: s for s in all_sts.items}
+
+        for name in names:
+            # Try exact match, then prefix match
+            sts = sts_map.get(name)
+            if not sts:
+                for k, v in sts_map.items():
+                    if k.startswith(name) or name in k:
+                        sts = v
+                        name = k
+                        break
+
+            if not sts:
+                result[name] = {"error": "not found"}
+                continue
+
+            desired = sts.spec.replicas or 1
+            ready = sts.status.ready_replicas or 0
+            if ready >= desired:
+                status = "healthy"
+            elif ready > 0:
+                status = "degraded"
+            else:
+                status = "unhealthy"
+            result[name] = {
+                "desired": desired,
+                "ready": ready,
+                "status": status,
+                "current_revision": sts.status.current_revision,
+            }
+        return result
+    except Exception as e:
+        log.error("collect_k8s_statefulsets_error", error=str(e))
+        return {"error": str(e)}
+
+
+def collect_k8s_namespace_summary(namespaces: list[str],
+                                  kubeconfig_path: Optional[str] = None) -> dict:
+    """
+    Collect pod counts and failure summary for multiple namespaces.
+    """
+    try:
+        from kubernetes import client, config as k8s_config
+
+        if kubeconfig_path:
+            k8s_config.load_kube_config(config_file=kubeconfig_path)
+        else:
+            try:
+                k8s_config.load_incluster_config()
+            except Exception:
+                k8s_config.load_kube_config()
+
+        v1 = client.CoreV1Api()
+        result = {}
+        for ns in namespaces:
+            try:
+                pods = v1.list_namespaced_pod(namespace=ns)
+                total = len(pods.items)
+                running = sum(1 for p in pods.items if p.status.phase == "Running")
+                failed = sum(1 for p in pods.items if p.status.phase == "Failed")
+                crashlooping = sum(
+                    1 for p in pods.items
+                    if p.status.container_statuses and
+                    any(cs.restart_count >= 5 for cs in p.status.container_statuses)
+                )
+                result[ns] = {"total": total, "running": running,
+                              "failed": failed, "crashlooping": crashlooping}
+            except Exception as e:
+                result[ns] = {"error": str(e)}
+        return result
+    except Exception as e:
+        log.error("collect_namespace_summary_error", error=str(e))
+        return {"error": str(e)}
+
+
 def collect_k8s_deployment_status(k8s_namespace: str, deployments: list[str],
                                    kubeconfig_path: Optional[str] = None) -> dict:
     """
@@ -126,6 +317,73 @@ def collect_k8s_deployment_status(k8s_namespace: str, deployments: list[str],
 
     except Exception as e:
         log.error("k8s_deployment_error", error=str(e))
+        return {"error": str(e)}
+
+
+def collect_k8s_cnpg_clusters(namespace: str, names: list[str],
+                              kubeconfig_path: Optional[str] = None) -> dict:
+    """
+    Collect CloudNativePG cluster health (TimescaleDB, etc.).
+    Uses the custom objects API for postgresql.cnpg.io/v1/clusters.
+    """
+    try:
+        from kubernetes import client, config as k8s_config
+
+        if kubeconfig_path:
+            k8s_config.load_kube_config(config_file=kubeconfig_path)
+        else:
+            try:
+                k8s_config.load_incluster_config()
+            except Exception:
+                k8s_config.load_kube_config()
+
+        custom_api = client.CustomObjectsApi()
+        try:
+            resp = custom_api.list_namespaced_custom_object(
+                group="postgresql.cnpg.io",
+                version="v1",
+                namespace=namespace,
+                plural="clusters",
+            )
+            items = resp.get("items", [])
+        except Exception:
+            return {}
+
+        # Build lookup by name
+        cluster_map = {c["metadata"]["name"]: c for c in items}
+
+        result = {}
+        for name in names:
+            cluster = cluster_map.get(name)
+            if not cluster:
+                result[name] = {"error": "not found"}
+                continue
+
+            status = cluster.get("status", {})
+            phase = status.get("phase", "Unknown")
+            ready = int(status.get("readyInstances", 0))
+            total = int(status.get("instances", 0))
+
+            # Phase contains error text for CNPG error states
+            phase_lower = phase.lower()
+            if "error" in phase_lower or "fail" in phase_lower:
+                health = "degraded"
+            elif ready >= total > 0:
+                health = "healthy"
+            elif ready > 0:
+                health = "degraded"
+            else:
+                health = "unhealthy"
+
+            result[name] = {
+                "phase": phase,
+                "ready": ready,
+                "desired": total,
+                "status": health,
+            }
+        return result
+    except Exception as e:
+        log.error("collect_cnpg_error", error=str(e))
         return {"error": str(e)}
 
 
