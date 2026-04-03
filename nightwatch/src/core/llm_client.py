@@ -47,9 +47,16 @@ class NightwatchLLMClient:
     DEEPSEEK_BASE_URL = "https://api.deepseek.com/v1"
 
     def __init__(self, config: dict):
+        import os
         self.provider = config.get("provider", "anthropic").lower()
         self.model = config.get("model", self._default_model())
-        self.api_key = config.get("api_key", "")
+        # Fall back to environment variables if api_key not set in config
+        _env_key_map = {
+            "anthropic": "ANTHROPIC_API_KEY",
+            "openai": "OPENAI_API_KEY",
+            "deepseek": "DEEPSEEK_API_KEY",
+        }
+        self.api_key = config.get("api_key", "") or os.environ.get(_env_key_map.get(self.provider, ""), "")
         self.base_url = config.get("base_url", "")
         self.timeout = config.get("timeout_seconds", 60)
         self.max_tokens = config.get("max_tokens", 2048)
