@@ -31,13 +31,41 @@ alerting:
   discord:
     webhook_url: ${DISCORD_WEBHOOK_URL}
 
-# ─── Auto-Healing ─────────────────────────────────────────────────────────────
+# ─── Repos (for GitOps auto-remediation) ─────────────────────────────────────
+repos:
+  fx:
+    path: ${FX_REPO_PATH:/repos/fx}
+    access: read  # Application code — read only for analysis
+  gitops:
+    path: ${GITOPS_REPO_PATH:/repos/sb-gitops}
+    access: readwrite  # K8s manifests — auto-fix and push
+    branch: master
+  infra:
+    path: ${INFRA_REPO_PATH:/repos/sb-dev-infra}
+    access: readwrite  # Ansible/Terraform — auto-fix and push
+    branch: master
+
+# ─── Auto-Healing (GitOps Remediation) ────────────────────────────────────────
 healing:
-  mode: suggest_only
-  dry_run: true
+  mode: auto_remediate
+  dry_run: false
+  escalation_channel: discord
+  nova_mention_id: "1319042937081593857"
   allowed_actions:
     - k8s_restart_pod
     - k8s_scale_up
+    - gitops_fix_memory
+    - gitops_fix_probe
+    - gitops_fix_image
+    - gitops_fix_resources
+    - code_analyze_and_recommend
+  # LLM for remediation (most capable local model)
+  remediation_llm:
+    provider: ollama
+    model: "kwangsuklee/Qwen3.5-27B-Claude-4.6-Opus-Reasoning-Distilled-GGUF:latest"
+    base_url: ${OLLAMA_URL:http://ollama.prod-forex.svc.cluster.local:11434}
+    timeout_seconds: 120
+    max_tokens: 4096
 
 # ─── API ──────────────────────────────────────────────────────────────────────
 api:

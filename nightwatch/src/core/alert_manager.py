@@ -247,6 +247,42 @@ class AlertManager:
             response.raise_for_status()
 
         log.info("discord_alert_sent", title=title)
+        return True
+
+    async def send_discord_raw(self, payload: dict) -> bool:
+        """Send a raw Discord webhook payload (for structured embeds from remediation)."""
+        if "discord" not in self.discord_config:
+            webhook_url = self.discord_config.get("webhook_url")
+        else:
+            webhook_url = self.discord_config.get("webhook_url")
+
+        if not webhook_url:
+            log.warning("discord_raw_send_skipped: no webhook URL configured")
+            return False
+
+        try:
+            payload.setdefault("username", "Nightwatch ⚡")
+            payload.setdefault("avatar_url", "https://em-content.zobj.net/source/openmoji/338/eye_1f441.png")
+            async with httpx.AsyncClient(timeout=10) as client:
+                response = await client.post(webhook_url, json=payload)
+                response.raise_for_status()
+            log.info("discord_raw_message_sent")
+
+            # Also trigger bot mention if there's a user mention in content
+            mention_match = None
+            content = payload.get("content", "")
+            import re
+            mention_match = re.search(r"<@(\d+)>", content)
+            if mention_match and DISCORD_BOT_TOKEN and DISCORD_CHANNEL_ID:
+                embed_title = ""
+                if payload.get("embeds"):
+                    embed_title = payload["embeds"][0].get("title", "Nightwatch Alert")
+                await self._send_bot_mention(mention_match.group(1), embed_title, "high", "🔧")
+
+            return True
+        except Exception as e:
+            log.error(f"discord_raw_send_failed: {e}")
+            return False
 
         # After the webhook embed, fire a plain Bot API message containing the
         # @mention so OpenClaw/Nova actually receives a mention event and wakes up.

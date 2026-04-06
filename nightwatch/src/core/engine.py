@@ -26,6 +26,14 @@ from src.adapters.base_adapter import BaseNightwatchAdapter, CheckStatus, Health
 from src.core.alert_manager import AlertManager
 from src.core.llm_client import NightwatchLLMClient, LLMError
 
+try:
+    from src.remediation.gitops_remediator import GitOpsRemediator
+    from src.remediation.playbooks import PlaybookRunner, PLAYBOOKS
+    from src.remediation.code_analyzer import ApplicationCodeAnalyzer
+    REMEDIATION_AVAILABLE = True
+except ImportError:
+    REMEDIATION_AVAILABLE = False
+
 log = structlog.get_logger("nightwatch.engine")
 
 
@@ -128,6 +136,23 @@ class NightwatchEngine:
         )
         self.enable_ai_diagnosis = config.get("nightwatch", {}).get("enable_ai_diagnosis", True)
 
+        # Auto-remediation (if available and configured)
+        self._remediator = None
+        self._code_analyzer = None
+        self._playbook_runner = None
+        healing_config = config.get("healing", {})
+        repos_config = config.get("repos", {})
+
+        if REMEDIATION_AVAILABLE and healing_config.get("mode") == "auto_remediate":
+            try:
+                self._remediator = GitOpsRemediator(repos_config, llm_client, self.alert_manager)
+                self._playbook_runner = PlaybookRunner(self._remediator)
+                fx_path = repos_config.get("fx", {}).get("path", "/repos/fx")
+                self._code_analyzer = ApplicationCodeAnalyzer(fx_path, llm_client, self.alert_manager)
+                log.info("auto_remediation_enabled", mode="auto_remediate")
+            except Exception as e:
+                log.warning(f"auto_remediation_init_failed: {e}")
+
         # State
         self._incidents: deque[Incident] = deque(maxlen=max_incidents)
         self._last_check: Optional[datetime] = None
@@ -229,7 +254,18 @@ class NightwatchEngine:
             )
             self._incidents.append(incident)
 
-            # Step 5: Send alert if severity warrants it
+            # Step 5: Auto-remediation (if enabled)
+            remediation_result = None
+            if REMEDIATION_AVAILABLE and getattr(self, '_remediator', None):
+                remediation_result = await self._run_auto_remediation(incident, failing)
+                if remediation_result:
+                    incident.diagnosis["remediation"] = {
+                        "attempted": True,
+                        "success": remediation_result.get("success", False),
+                        "description": remediation_result.get("description", ""),
+                    }
+
+            # Step 6: Send alert if severity warrants it
             if severity in self.alert_severities:
                 await self._send_incident_alert(incident)
                 incident.alert_sent = True
@@ -276,6 +312,102 @@ class NightwatchEngine:
                 "auto_fix_possible": False,
                 "confidence": 0.0,
             }
+
+    # ─── Auto-Remediation ────────────────────────────────────────────────────
+
+    async def _run_auto_remediation(self, incident: "Incident", failing: list) -> Optional[dict]:
+        """Attempt auto-remediation for cluster/GitOps issues. Escalate app errors to Nova."""
+        if not self._remediator:
+            return None
+
+        try:
+            # Classify each failing check
+            for check in failing:
+                issue_type = self._classify_issue_type(check)
+                resource_name = self._extract_resource_name(check)
+                pod_name = check.metadata.get("pod_name", "") if hasattr(check, "metadata") else ""
+                namespace = "prod-forex"
+
+                if issue_type in GitOpsRemediator.SAFE_AUTO_FIX:
+                    # Cluster/GitOps issue → auto-remediate
+                    log.info(f"auto_remediating: {issue_type} on {resource_name}")
+
+                    # Pick the right playbook
+                    playbook_map = {
+                        "oom_kill": "oom_kill",
+                        "crash_loop_backoff": "crash_loop",
+                        "image_pull_error": "image_pull",
+                        "liveness_probe_failure": "probe_failure",
+                        "readiness_probe_failure": "probe_failure",
+                        "startup_probe_failure": "probe_failure",
+                        "resource_quota_exceeded": "resource_exhaustion",
+                        "pending_pod_scheduling": "resource_exhaustion",
+                    }
+                    playbook_name = playbook_map.get(issue_type, "crash_loop")
+
+                    result = await self._playbook_runner.run(
+                        playbook_name, namespace, resource_name, pod_name
+                    )
+
+                    if result.success:
+                        log.info(f"auto_remediation_success: {resource_name}", playbook=playbook_name)
+                        return {"success": True, "description": result.fix_description, "playbook": playbook_name}
+                    else:
+                        # Playbook failed — escalate with debug context
+                        log.warning(f"auto_remediation_failed: {resource_name}, escalating to Nova")
+                        if self._code_analyzer:
+                            analysis = await self._code_analyzer.analyze_pod_error(namespace, pod_name)
+                            debug_ctx = f"Playbook '{playbook_name}' failed. Steps: {result.steps_completed}. Error: {result.error}"
+                            msg = self._code_analyzer.format_escalation_message(analysis, debug_ctx)
+                            await self.alert_manager.send_discord_raw(msg)
+                        return {"success": False, "description": result.fix_description, "error": result.error}
+
+                else:
+                    # Application code error → analyze and send to Nova
+                    log.info(f"application_error_detected: {resource_name}, analyzing for Nova")
+                    if self._code_analyzer:
+                        analysis = await self._code_analyzer.analyze_pod_error(
+                            namespace, pod_name or resource_name
+                        )
+                        msg = self._code_analyzer.format_discord_message(analysis)
+                        await self.alert_manager.send_discord_raw(msg)
+                        return {"success": False, "description": f"App error in {resource_name} — sent to Nova",
+                                "escalated": True}
+
+        except Exception as e:
+            log.error(f"auto_remediation_error: {e}")
+        return None
+
+    def _classify_issue_type(self, check) -> str:
+        """Classify a failing health check into an issue type."""
+        msg = (check.message or "").lower()
+        name = (check.name or "").lower()
+
+        if "oomkill" in msg or "oom" in msg:
+            return "oom_kill"
+        if "crashloopbackoff" in msg or "crash" in msg:
+            return "crash_loop_backoff"
+        if "imagepullbackoff" in msg or "image" in msg and "pull" in msg:
+            return "image_pull_error"
+        if "liveness" in msg and ("fail" in msg or "timeout" in msg):
+            return "liveness_probe_failure"
+        if "readiness" in msg and ("fail" in msg or "timeout" in msg):
+            return "readiness_probe_failure"
+        if "startup" in msg and ("fail" in msg or "timeout" in msg):
+            return "startup_probe_failure"
+        if "pending" in msg or "insufficient" in msg:
+            return "pending_pod_scheduling"
+        return "application_error"
+
+    def _extract_resource_name(self, check) -> str:
+        """Extract the deployment/pod name from a health check."""
+        name = check.name or ""
+        # Strip common prefixes
+        name = name.replace("pod:", "").replace("deployment:", "").strip()
+        # Strip hash suffixes (pod-abc123-xyz45)
+        import re
+        name = re.sub(r"-[a-f0-9]{8,10}-[a-z0-9]{5}$", "", name)
+        return name
 
     # ─── Alerting ─────────────────────────────────────────────────────────────
 
