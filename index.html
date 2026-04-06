@@ -1339,153 +1339,339 @@ section.present .anim-fade  { animation:fadeIn       0.5s  ease forwards; }
      SLIDE 13: ANIMATED NETWORK TRAFFIC DIAGRAM (VPC-style)
      ================================================================ -->
 <section data-transition="fade" data-background="#060B18">
-  <div class="slide-title will-animate" style="font-size:1.4rem;margin-bottom:2px;text-align:center;">Model N &mdash; Data Pipeline Network Traffic</div>
+  <div class="slide-title will-animate" style="font-size:1.25rem;margin-bottom:0;text-align:center;letter-spacing:0.5px;">Model N ETL Pipeline &mdash; End-to-End Network Traffic</div>
 
   <style>
-    .vpc-canvas { position:relative; width:100%; height:540px; background:#060B18; border-radius:10px; border:1px solid rgba(0,212,255,0.08); overflow:hidden; }
-    /* Zone boxes like VPC subnets */
-    .vpc-zone { position:absolute; border:1.5px dashed; border-radius:10px; padding:6px 8px; }
-    .vpc-zone-label { font-size:0.55rem; font-weight:700; text-transform:uppercase; letter-spacing:1px; margin-bottom:4px; }
-    /* Nodes — larger, with glow */
-    .vpc-node { position:absolute; width:68px; height:60px; border-radius:8px; border:1.5px solid; display:flex; flex-direction:column; align-items:center; justify-content:center; font-size:0.5rem; font-weight:600; text-align:center; z-index:10; transition:all 0.3s; }
-    .vpc-node:hover { transform:scale(1.2); z-index:20; }
-    .vpc-node .vpc-icon { font-size:1.3rem; margin-bottom:2px; filter:drop-shadow(0 0 6px currentColor); }
-    /* SVG lines + animated glowing dots */
-    .vpc-svg { position:absolute; top:0; left:0; width:100%; height:100%; z-index:2; pointer-events:none; }
-    .vpc-line { fill:none; stroke-width:1.5; }
-    .vpc-glow { filter:drop-shadow(0 0 6px currentColor); }
-    /* Footer */
-    .vpc-footer { position:absolute; bottom:0; left:0; right:0; padding:5px 10px; background:rgba(6,11,24,0.9); border-top:1px solid rgba(0,212,255,0.08); display:flex; gap:6px; justify-content:center; flex-wrap:wrap; z-index:15; }
-    .vpc-footer span { font-size:0.48rem; color:rgba(255,255,255,0.35); padding:1px 5px; border:1px solid rgba(0,212,255,0.08); border-radius:3px; }
+    .ntd { position:relative; width:100%; height:560px; background:radial-gradient(ellipse at 50% 30%, #0a1628 0%, #060B18 70%); border-radius:10px; overflow:hidden; }
+    /* Starfield background shimmer */
+    .ntd::before { content:''; position:absolute; inset:0; background:
+      radial-gradient(1px 1px at 10% 15%, rgba(0,212,255,0.3), transparent),
+      radial-gradient(1px 1px at 25% 45%, rgba(168,224,0,0.2), transparent),
+      radial-gradient(1px 1px at 55% 12%, rgba(168,85,247,0.25), transparent),
+      radial-gradient(1px 1px at 80% 65%, rgba(0,212,255,0.2), transparent),
+      radial-gradient(1px 1px at 40% 80%, rgba(255,140,66,0.2), transparent),
+      radial-gradient(1px 1px at 92% 30%, rgba(245,158,11,0.3), transparent),
+      radial-gradient(1px 1px at 65% 90%, rgba(20,184,166,0.25), transparent);
+      pointer-events:none; z-index:0; }
+    /* VPC border */
+    .ntd-vpc { position:absolute; top:78px; left:12%; right:4%; bottom:38px; border:1.5px dashed rgba(0,212,255,0.18); border-radius:14px; z-index:1; }
+    .ntd-vpc-label { position:absolute; top:-9px; left:16px; background:#060B18; padding:0 8px; font-size:0.45rem; font-weight:700; letter-spacing:1.5px; text-transform:uppercase; color:rgba(0,212,255,0.45); }
+    /* Zone boxes */
+    .ntd-zone { position:absolute; border:1px dashed; border-radius:8px; z-index:1; }
+    .ntd-zone-lbl { position:absolute; top:3px; left:8px; font-size:0.42rem; font-weight:700; text-transform:uppercase; letter-spacing:1px; opacity:0.6; }
+    /* Nodes */
+    .ntd-n { position:absolute; border-radius:7px; border:1.2px solid; display:flex; flex-direction:column; align-items:center; justify-content:center; font-size:0.42rem; font-weight:600; text-align:center; z-index:10; transition:transform 0.25s, box-shadow 0.25s; line-height:1.2; padding:2px 3px; }
+    .ntd-n:hover { transform:scale(1.18); z-index:30; }
+    .ntd-n i { font-size:0.95rem; margin-bottom:1px; font-style:normal; display:block; }
+    .ntd-n.sm { width:58px; height:44px; font-size:0.38rem; }
+    .ntd-n.md { width:66px; height:50px; }
+    .ntd-n.lg { width:78px; height:54px; font-size:0.44rem; }
+    .ntd-n.xl { width:88px; height:56px; font-size:0.44rem; font-weight:800; }
+    /* Glow effect classes */
+    .glow-cyan { box-shadow:0 0 12px rgba(0,212,255,0.25), inset 0 0 8px rgba(0,212,255,0.06); }
+    .glow-blue { box-shadow:0 0 12px rgba(0,114,229,0.25), inset 0 0 8px rgba(0,114,229,0.06); }
+    .glow-green { box-shadow:0 0 12px rgba(168,224,0,0.25), inset 0 0 8px rgba(168,224,0,0.06); }
+    .glow-purple { box-shadow:0 0 12px rgba(168,85,247,0.25), inset 0 0 8px rgba(168,85,247,0.06); }
+    .glow-orange { box-shadow:0 0 12px rgba(255,140,66,0.25), inset 0 0 8px rgba(255,140,66,0.06); }
+    .glow-amber { box-shadow:0 0 12px rgba(245,158,11,0.25), inset 0 0 8px rgba(245,158,11,0.06); }
+    .glow-teal { box-shadow:0 0 12px rgba(20,184,166,0.25), inset 0 0 8px rgba(20,184,166,0.06); }
+    .glow-rose { box-shadow:0 0 12px rgba(244,63,94,0.25), inset 0 0 8px rgba(244,63,94,0.06); }
+    /* Model N special zone */
+    .ntd-mn-zone { position:absolute; border:1.5px solid rgba(168,224,0,0.22); border-radius:10px; background:rgba(168,224,0,0.02); z-index:1; }
+    .ntd-mn-lbl { position:absolute; top:-9px; right:10px; background:#060B18; padding:0 6px; font-size:0.42rem; font-weight:700; letter-spacing:1px; text-transform:uppercase; color:rgba(168,224,0,0.5); }
+    /* Sub-module chips inside Model N */
+    .mn-chip { display:inline-block; font-size:0.32rem; padding:1px 4px; border-radius:3px; border:1px solid rgba(168,224,0,0.2); background:rgba(168,224,0,0.05); color:rgba(190,242,100,0.7); margin:1px; white-space:nowrap; }
+    /* SVG layer */
+    .ntd-svg { position:absolute; top:0; left:0; width:100%; height:100%; z-index:5; pointer-events:none; }
+    /* Legend */
+    .ntd-legend { position:absolute; bottom:4px; left:0; right:0; display:flex; gap:10px; justify-content:center; flex-wrap:wrap; z-index:15; padding:4px 8px; background:linear-gradient(transparent, rgba(6,11,24,0.95)); }
+    .ntd-legend-item { display:flex; align-items:center; gap:3px; font-size:0.38rem; color:rgba(255,255,255,0.45); }
+    .ntd-legend-dot { width:6px; height:6px; border-radius:50%; }
+    /* Security bar */
+    .ntd-sec { position:absolute; right:0; top:78px; bottom:38px; width:3.5%; border-left:1px dashed rgba(244,63,94,0.12); background:rgba(244,63,94,0.015); z-index:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:6px; }
+    .ntd-sec-icon { font-size:0.55rem; opacity:0.35; font-style:normal; display:block; }
+    .ntd-sec-lbl { writing-mode:vertical-rl; font-size:0.35rem; letter-spacing:2px; text-transform:uppercase; color:rgba(244,63,94,0.3); font-weight:700; }
+    /* Pulse animation for key nodes */
+    @keyframes ntd-pulse { 0%,100% { opacity:1; } 50% { opacity:0.7; } }
+    .ntd-pulse { animation: ntd-pulse 3s ease-in-out infinite; }
   </style>
 
-  <div class="vpc-canvas will-animate anim-fade d1">
+  <div class="ntd will-animate anim-fade d1">
 
-    <!-- ═══ ZONE BOXES (like VPC subnets) ═══ -->
-    <div class="vpc-zone" style="top:8px;left:2%;width:42%;height:80px;border-color:rgba(0,114,229,0.2);background:rgba(0,114,229,0.03);">
-      <div class="vpc-zone-label" style="color:rgba(0,114,229,0.5);">Source Systems (SAP / Partners)</div>
-    </div>
-    <div class="vpc-zone" style="top:8px;right:2%;width:18%;height:80px;border-color:rgba(168,85,247,0.2);background:rgba(168,85,247,0.02);">
-      <div class="vpc-zone-label" style="color:rgba(168,85,247,0.5);">External</div>
-    </div>
-    <div class="vpc-zone" style="top:100px;left:2%;width:72%;height:80px;border-color:rgba(0,212,255,0.15);background:rgba(0,212,255,0.02);">
-      <div class="vpc-zone-label" style="color:rgba(0,212,255,0.4);">Ingestion Layer &mdash; AWS Transfer + Lambda + Step Functions</div>
-    </div>
-    <div class="vpc-zone" style="top:195px;left:2%;width:85%;height:80px;border-color:rgba(168,224,0,0.15);background:rgba(168,224,0,0.02);">
-      <div class="vpc-zone-label" style="color:rgba(168,224,0,0.4);">Processing Layer &mdash; AWS Glue ETL (6 Jobs)</div>
-    </div>
-    <div class="vpc-zone" style="top:290px;left:2%;width:92%;height:80px;border-color:rgba(168,224,0,0.2);background:rgba(168,224,0,0.02);">
-      <div class="vpc-zone-label" style="color:rgba(168,224,0,0.5);">Consumption &mdash; Model N + Oracle + Snowflake</div>
-    </div>
-    <div class="vpc-zone" style="top:385px;left:2%;width:92%;height:80px;border-color:rgba(255,140,66,0.15);background:rgba(255,140,66,0.02);">
-      <div class="vpc-zone-label" style="color:rgba(255,140,66,0.4);">Reporting &amp; Outbound</div>
+    <!-- ═══ AWS VPC BORDER ═══ -->
+    <div class="ntd-vpc">
+      <div class="ntd-vpc-label">AWS VPC &mdash; us-east-1</div>
     </div>
 
-    <!-- ═══ NODES ═══ -->
-    <!-- Source row -->
-    <div class="vpc-node" style="top:30px;left:4%;border-color:rgba(0,114,229,0.4);background:rgba(0,114,229,0.08);color:#4DA8FF;"><span class="vpc-icon">🏭</span>SAP P2R</div>
-    <div class="vpc-node" style="top:30px;left:14%;border-color:rgba(0,114,229,0.4);background:rgba(0,114,229,0.08);color:#4DA8FF;"><span class="vpc-icon">🏭</span>SAP P4S</div>
-    <div class="vpc-node" style="top:30px;left:24%;border-color:rgba(0,114,229,0.4);background:rgba(0,114,229,0.08);color:#4DA8FF;"><span class="vpc-icon">📋</span>SAP MDM</div>
-    <div class="vpc-node" style="top:30px;left:34%;border-color:rgba(0,114,229,0.4);background:rgba(0,114,229,0.08);color:#4DA8FF;"><span class="vpc-icon">📥</span>SFTP MFT</div>
-    <div class="vpc-node" style="top:30px;right:5%;border-color:rgba(168,85,247,0.5);background:rgba(168,85,247,0.08);color:#C084FC;"><span class="vpc-icon">🔄</span>Axway EDI</div>
+    <!-- ═══ SECURITY SIDEBAR ═══ -->
+    <div class="ntd-sec">
+      <i class="ntd-sec-icon">&#x1F512;</i>
+      <i class="ntd-sec-icon">&#x1F6E1;</i>
+      <i class="ntd-sec-icon">&#x1F4D1;</i>
+      <div class="ntd-sec-lbl">Security &amp; Governance</div>
+    </div>
 
-    <!-- Ingestion row -->
-    <div class="vpc-node" style="top:118px;left:5%;border-color:rgba(0,212,255,0.4);background:rgba(0,212,255,0.06);color:#67E8F9;"><span class="vpc-icon">📥</span>AWS SFTP<br>Transfer</div>
-    <div class="vpc-node" style="top:118px;left:20%;border-color:rgba(255,140,66,0.5);background:rgba(255,140,66,0.08);color:#FFB07A;"><span class="vpc-icon">⚡</span>Lambda<br>Trigger</div>
-    <div class="vpc-node" style="top:118px;left:38%;border-color:rgba(168,85,247,0.5);background:rgba(168,85,247,0.06);color:#C084FC;"><span class="vpc-icon">🔀</span>Step Fn<br>Workflow</div>
-    <div class="vpc-node" style="top:118px;left:55%;border-color:rgba(0,212,255,0.4);background:rgba(0,212,255,0.06);color:#67E8F9;"><span class="vpc-icon">☁️</span>S3<br>Landing</div>
+    <!-- ═══ MODEL N ZONE (right) ═══ -->
+    <div class="ntd-mn-zone" style="top:195px;right:6%;width:16%;height:175px;">
+      <div class="ntd-mn-lbl">Model N Zone</div>
+    </div>
 
-    <!-- Processing row -->
-    <div class="vpc-node" style="top:213px;left:4%;border-color:rgba(0,212,255,0.3);background:rgba(0,212,255,0.04);color:#67E8F9;"><span class="vpc-icon">📦</span>S3 Raw</div>
-    <div class="vpc-node" style="top:213px;left:18%;border-color:rgba(168,224,0,0.5);background:rgba(168,224,0,0.06);color:#BEF264;"><span class="vpc-icon">⚙️</span>raw-job</div>
-    <div class="vpc-node" style="top:213px;left:33%;border-color:rgba(168,224,0,0.5);background:rgba(168,224,0,0.06);color:#BEF264;"><span class="vpc-icon">⚙️</span>model-job</div>
-    <div class="vpc-node" style="top:213px;left:48%;border-color:rgba(168,224,0,0.5);background:rgba(168,224,0,0.06);color:#BEF264;"><span class="vpc-icon">⚙️</span>rodb-job</div>
-    <div class="vpc-node" style="top:213px;left:63%;border-color:rgba(168,224,0,0.5);background:rgba(168,224,0,0.06);color:#BEF264;"><span class="vpc-icon">⚙️</span>enriched</div>
+    <!-- ═══ ZONE BOXES ═══ -->
+    <!-- External Sources (left, outside VPC visually) -->
+    <div class="ntd-zone" style="top:4px;left:0.5%;width:10.5%;height:68px;border-color:rgba(0,114,229,0.18);background:rgba(0,114,229,0.02);">
+      <div class="ntd-zone-lbl" style="color:rgba(0,114,229,0.5);">External</div>
+    </div>
 
-    <!-- Consume row -->
-    <div class="vpc-node" style="top:308px;left:5%;width:90px;border-color:rgba(168,224,0,0.6);background:rgba(168,224,0,0.08);color:#BEF264;font-weight:800;"><span class="vpc-icon" style="font-size:1.5rem;">🏛️</span>Model N<br>PhyN Suite</div>
-    <div class="vpc-node" style="top:308px;left:25%;border-color:rgba(168,85,247,0.5);background:rgba(168,85,247,0.06);color:#C084FC;"><span class="vpc-icon">🗃️</span>Oracle<br>RODB</div>
-    <div class="vpc-node" style="top:308px;left:42%;border-color:rgba(20,184,166,0.5);background:rgba(20,184,166,0.06);color:#5EEAD4;"><span class="vpc-icon">❄️</span>Snowflake</div>
-    <div class="vpc-node" style="top:308px;left:58%;border-color:rgba(0,212,255,0.3);background:rgba(0,212,255,0.04);color:#67E8F9;"><span class="vpc-icon">📦</span>S3<br>Enriched</div>
+    <!-- Ingestion -->
+    <div class="ntd-zone" style="top:82px;left:13%;width:46%;height:72px;border-color:rgba(0,212,255,0.12);background:rgba(0,212,255,0.015);">
+      <div class="ntd-zone-lbl" style="color:rgba(0,212,255,0.45);">Ingestion Zone</div>
+    </div>
 
-    <!-- Report/Outbound row -->
-    <div class="vpc-node" style="top:403px;left:4%;border-color:rgba(255,140,66,0.5);background:rgba(255,140,66,0.06);color:#FFB07A;"><span class="vpc-icon">📊</span>Galaxy<br>Reports</div>
-    <div class="vpc-node" style="top:403px;left:18%;border-color:rgba(255,140,66,0.5);background:rgba(255,140,66,0.06);color:#FFB07A;"><span class="vpc-icon">📈</span>DBX-FI</div>
-    <div class="vpc-node" style="top:403px;left:33%;border-color:rgba(244,63,94,0.5);background:rgba(244,63,94,0.06);color:#FDA4AF;"><span class="vpc-icon">📤</span>s3-to-sftp<br>Outbound</div>
-    <div class="vpc-node" style="top:403px;left:48%;border-color:rgba(255,140,66,0.4);background:rgba(255,140,66,0.04);color:#FFB07A;"><span class="vpc-icon">📧</span>Email<br>Alerts</div>
-    <div class="vpc-node" style="top:403px;left:63%;border-color:rgba(0,114,229,0.4);background:rgba(0,114,229,0.05);color:#4DA8FF;"><span class="vpc-icon">📝</span>Audit<br>Lambda</div>
+    <!-- Orchestration -->
+    <div class="ntd-zone" style="top:82px;left:60%;width:16%;height:72px;border-color:rgba(245,158,11,0.15);background:rgba(245,158,11,0.015);">
+      <div class="ntd-zone-lbl" style="color:rgba(245,158,11,0.45);">Orchestration</div>
+    </div>
 
-    <!-- Side nodes -->
-    <div class="vpc-node" style="top:135px;right:3%;width:72px;border-color:rgba(245,158,11,0.5);background:rgba(245,158,11,0.06);color:#FCD34D;"><span class="vpc-icon">⏰</span>CW Cron<br>23 Triggers</div>
-    <div class="vpc-node" style="top:240px;right:3%;width:72px;border-color:rgba(0,114,229,0.3);background:rgba(0,114,229,0.04);color:#4DA8FF;"><span class="vpc-icon">🔐</span>Secrets<br>KMS+IAM</div>
-    <div class="vpc-node" style="top:340px;right:3%;width:72px;border-color:rgba(245,158,11,0.3);background:rgba(245,158,11,0.03);color:#FCD34D;"><span class="vpc-icon">🏗️</span>Terraform<br>IaC</div>
+    <!-- S3 Zones -->
+    <div class="ntd-zone" style="top:160px;left:13%;width:22%;height:54px;border-color:rgba(0,212,255,0.1);background:rgba(0,212,255,0.01);">
+      <div class="ntd-zone-lbl" style="color:rgba(0,212,255,0.4);">Storage</div>
+    </div>
 
-    <!-- ═══ SVG ANIMATED PATHS + GLOWING DOTS ═══ -->
-    <svg class="vpc-svg" viewBox="0 0 1000 540" preserveAspectRatio="none">
+    <!-- Processing -->
+    <div class="ntd-zone" style="top:222px;left:13%;width:62%;height:66px;border-color:rgba(168,224,0,0.12);background:rgba(168,224,0,0.012);">
+      <div class="ntd-zone-lbl" style="color:rgba(168,224,0,0.45);">Processing &mdash; AWS Glue ETL</div>
+    </div>
+
+    <!-- Data Stores -->
+    <div class="ntd-zone" style="top:296px;left:13%;width:42%;height:62px;border-color:rgba(20,184,166,0.12);background:rgba(20,184,166,0.012);">
+      <div class="ntd-zone-lbl" style="color:rgba(20,184,166,0.45);">Data Stores</div>
+    </div>
+
+    <!-- Reporting -->
+    <div class="ntd-zone" style="top:368px;left:13%;width:42%;height:56px;border-color:rgba(255,140,66,0.12);background:rgba(255,140,66,0.012);">
+      <div class="ntd-zone-lbl" style="color:rgba(255,140,66,0.45);">Reporting &amp; Analytics</div>
+    </div>
+
+    <!-- Outbound -->
+    <div class="ntd-zone" style="top:432px;left:13%;width:62%;height:58px;border-color:rgba(244,63,94,0.12);background:rgba(244,63,94,0.012);">
+      <div class="ntd-zone-lbl" style="color:rgba(244,63,94,0.4);">Outbound Delivery &amp; Audit</div>
+    </div>
+
+    <!-- ═══ EXTERNAL SOURCE NODES (left column, outside VPC) ═══ -->
+    <div class="ntd-n sm glow-blue" style="top:8px;left:1%;border-color:rgba(0,114,229,0.5);background:rgba(0,114,229,0.1);color:#4DA8FF;"><i>&#x1F3ED;</i>SAP P2R</div>
+    <div class="ntd-n sm glow-blue" style="top:8px;left:6.5%;border-color:rgba(0,114,229,0.5);background:rgba(0,114,229,0.1);color:#4DA8FF;"><i>&#x1F3ED;</i>SAP P4S</div>
+    <div class="ntd-n sm glow-blue" style="top:80px;left:1%;border-color:rgba(0,114,229,0.5);background:rgba(0,114,229,0.1);color:#4DA8FF;"><i>&#x1F4CB;</i>SAP MDM</div>
+    <div class="ntd-n sm glow-purple" style="top:80px;left:6.5%;border-color:rgba(168,85,247,0.5);background:rgba(168,85,247,0.1);color:#C084FC;"><i>&#x1F504;</i>Axway EDI</div>
+
+    <!-- ═══ INGESTION NODES ═══ -->
+    <div class="ntd-n md glow-cyan" style="top:90px;left:14%;border-color:rgba(0,212,255,0.45);background:rgba(0,212,255,0.07);color:#67E8F9;"><i>&#x1F4E5;</i>AWS SFTP<br>Transfer</div>
+    <div class="ntd-n sm glow-orange" style="top:93px;left:22%;border-color:rgba(255,140,66,0.5);background:rgba(255,140,66,0.08);color:#FFB07A;"><i>&#x26A1;</i>sftp-file<br>trigger</div>
+    <div class="ntd-n sm glow-orange" style="top:93px;left:29%;border-color:rgba(255,140,66,0.5);background:rgba(255,140,66,0.08);color:#FFB07A;"><i>&#x26A1;</i>fetch-src<br>to-S3</div>
+    <div class="ntd-n sm glow-orange" style="top:93px;left:36%;border-color:rgba(255,140,66,0.5);background:rgba(255,140,66,0.08);color:#FFB07A;"><i>&#x26A1;</i>init-param<br>stpfnc</div>
+    <div class="ntd-n md glow-purple ntd-pulse" style="top:90px;left:44%;border-color:rgba(168,85,247,0.6);background:rgba(168,85,247,0.08);color:#C084FC;"><i>&#x1F500;</i>Step Functions<br>bay-modeln</div>
+
+    <!-- ═══ ORCHESTRATION NODES ═══ -->
+    <div class="ntd-n md glow-amber" style="top:90px;left:61%;border-color:rgba(245,158,11,0.5);background:rgba(245,158,11,0.08);color:#FCD34D;"><i>&#x23F0;</i>CloudWatch<br>23 Cron Jobs</div>
+    <div class="ntd-n sm glow-amber" style="top:90px;left:69%;border-color:rgba(245,158,11,0.35);background:rgba(245,158,11,0.05);color:#FCD34D;"><i>&#x1F4E8;</i>EventBridge<br>Rules</div>
+
+    <!-- ═══ S3 STORAGE NODES ═══ -->
+    <div class="ntd-n md glow-cyan" style="top:164px;left:14%;border-color:rgba(0,212,255,0.4);background:rgba(0,212,255,0.06);color:#67E8F9;"><i>&#x2601;</i>S3 Landing<br>Zone</div>
+    <div class="ntd-n md glow-cyan" style="top:164px;left:22%;border-color:rgba(0,212,255,0.4);background:rgba(0,212,255,0.06);color:#67E8F9;"><i>&#x1F4E6;</i>S3 Raw Zone<br>(immutable)</div>
+    <div class="ntd-n md glow-cyan" style="top:164px;left:30%;border-color:rgba(0,212,255,0.35);background:rgba(0,212,255,0.05);color:#67E8F9;"><i>&#x2728;</i>S3 Enriched<br>Zone</div>
+
+    <!-- ═══ GLUE ETL PROCESSING NODES ═══ -->
+    <div class="ntd-n md glow-green" style="top:233px;left:14%;border-color:rgba(168,224,0,0.5);background:rgba(168,224,0,0.07);color:#BEF264;"><i>&#x2699;</i>raw-job<br>land&#x2192;raw</div>
+    <div class="ntd-n md glow-green" style="top:233px;left:23%;border-color:rgba(168,224,0,0.5);background:rgba(168,224,0,0.07);color:#BEF264;"><i>&#x2699;</i>model-job<br>raw&#x2192;SF</div>
+    <div class="ntd-n md glow-green" style="top:233px;left:32%;border-color:rgba(168,224,0,0.5);background:rgba(168,224,0,0.07);color:#BEF264;"><i>&#x2699;</i>rodb-job<br>raw&#x2192;Oracle</div>
+    <div class="ntd-n md glow-green" style="top:233px;left:41%;border-color:rgba(168,224,0,0.5);background:rgba(168,224,0,0.07);color:#BEF264;"><i>&#x2699;</i>enriched-job<br>process</div>
+    <div class="ntd-n md glow-green" style="top:233px;left:50%;border-color:rgba(168,224,0,0.5);background:rgba(168,224,0,0.07);color:#BEF264;"><i>&#x2699;</i>s3-to-sftp<br>outbound</div>
+    <div class="ntd-n sm glow-green" style="top:237px;left:59%;border-color:rgba(168,224,0,0.35);background:rgba(168,224,0,0.05);color:#BEF264;"><i>&#x1F517;</i>VPC<br>Connection</div>
+
+    <!-- ═══ DATA STORE NODES ═══ -->
+    <div class="ntd-n lg glow-teal" style="top:304px;left:14%;border-color:rgba(20,184,166,0.5);background:rgba(20,184,166,0.07);color:#5EEAD4;"><i>&#x2744;</i>Snowflake<br>Stored Procs</div>
+    <div class="ntd-n lg glow-purple" style="top:304px;left:26%;border-color:rgba(168,85,247,0.5);background:rgba(168,85,247,0.07);color:#C084FC;"><i>&#x1F5C3;</i>Oracle RODB<br>Model N DB</div>
+    <div class="ntd-n md glow-amber" style="top:304px;left:38%;border-color:rgba(245,158,11,0.4);background:rgba(245,158,11,0.06);color:#FCD34D;"><i>&#x1F4BE;</i>DynamoDB<br>State Track</div>
+
+    <!-- ═══ MODEL N NODES (right zone) ═══ -->
+    <div class="ntd-n xl glow-green ntd-pulse" style="top:200px;right:7.5%;border-color:rgba(168,224,0,0.6);background:rgba(168,224,0,0.1);color:#BEF264;"><i style="font-size:1.1rem;">&#x1F3DB;</i>Model N<br>PhyN Suite</div>
+    <!-- Module chips below Model N node -->
+    <div style="position:absolute;top:260px;right:6.2%;width:15%;z-index:10;text-align:center;line-height:1.6;">
+      <span class="mn-chip">Gov Pricing</span>
+      <span class="mn-chip">Medicaid</span>
+      <span class="mn-chip">340B</span>
+      <span class="mn-chip">Contracts</span>
+      <span class="mn-chip">Chargebacks</span>
+    </div>
+    <div class="ntd-n sm glow-green" style="top:340px;right:8%;border-color:rgba(168,224,0,0.35);background:rgba(168,224,0,0.05);color:#BEF264;"><i>&#x1F4E4;</i>Model N<br>SFTP</div>
+
+    <!-- ═══ REPORTING NODES ═══ -->
+    <div class="ntd-n md glow-orange" style="top:376px;left:14%;border-color:rgba(255,140,66,0.5);background:rgba(255,140,66,0.07);color:#FFB07A;"><i>&#x1F4CA;</i>Galaxy<br>Reports</div>
+    <div class="ntd-n md glow-orange" style="top:376px;left:24%;border-color:rgba(255,140,66,0.5);background:rgba(255,140,66,0.07);color:#FFB07A;"><i>&#x1F4C8;</i>DBX-FI<br>Financial</div>
+    <div class="ntd-n md glow-teal" style="top:376px;left:34%;border-color:rgba(20,184,166,0.4);background:rgba(20,184,166,0.05);color:#5EEAD4;"><i>&#x2744;</i>Snowflake<br>Analytics</div>
+
+    <!-- ═══ OUTBOUND / AUDIT NODES ═══ -->
+    <div class="ntd-n sm glow-rose" style="top:442px;left:14%;border-color:rgba(244,63,94,0.5);background:rgba(244,63,94,0.06);color:#FDA4AF;"><i>&#x1F4E7;</i>email-err<br>Lambda</div>
+    <div class="ntd-n sm glow-cyan" style="top:442px;left:22%;border-color:rgba(0,212,255,0.4);background:rgba(0,212,255,0.05);color:#67E8F9;"><i>&#x1F4DD;</i>capture<br>audit</div>
+    <div class="ntd-n sm glow-orange" style="top:442px;left:30%;border-color:rgba(255,140,66,0.4);background:rgba(255,140,66,0.05);color:#FFB07A;"><i>&#x1F510;</i>rodb-creds<br>rotate</div>
+    <div class="ntd-n sm glow-purple" style="top:442px;left:38%;border-color:rgba(168,85,247,0.4);background:rgba(168,85,247,0.05);color:#C084FC;"><i>&#x1F578;</i>scraping<br>Lambda</div>
+    <div class="ntd-n sm glow-blue" style="top:442px;left:46%;border-color:rgba(0,114,229,0.4);background:rgba(0,114,229,0.05);color:#4DA8FF;"><i>&#x1F6E0;</i>Terraform<br>IaC</div>
+    <div class="ntd-n sm glow-blue" style="top:442px;left:54%;border-color:rgba(0,114,229,0.4);background:rgba(0,114,229,0.05);color:#4DA8FF;"><i>&#x1F504;</i>GitHub<br>Actions</div>
+    <div class="ntd-n sm glow-amber" style="top:442px;left:62%;border-color:rgba(245,158,11,0.4);background:rgba(245,158,11,0.05);color:#FCD34D;"><i>&#x1F3AB;</i>ServiceNow<br>ITSM</div>
+
+    <!-- Security side nodes -->
+    <div class="ntd-n sm" style="top:438px;right:7%;width:52px;height:38px;border-color:rgba(244,63,94,0.35);background:rgba(244,63,94,0.04);color:#FDA4AF;font-size:0.34rem;"><i style="font-size:0.7rem;">&#x1F512;</i>Secrets+KMS</div>
+    <div class="ntd-n sm" style="top:438px;right:2%;width:52px;height:38px;border-color:rgba(244,63,94,0.35);background:rgba(244,63,94,0.04);color:#FDA4AF;font-size:0.34rem;"><i style="font-size:0.7rem;">&#x1F6E1;</i>IAM+Trail</div>
+
+    <!-- ═══ SVG ANIMATED PATHS + GLOWING TRAFFIC DOTS ═══ -->
+    <svg class="ntd-svg" viewBox="0 0 1000 560" preserveAspectRatio="none">
       <defs>
-        <filter id="glow"><feGaussianBlur stdDeviation="3" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+        <filter id="g13"><feGaussianBlur stdDeviation="3.5" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+        <filter id="g13s"><feGaussianBlur stdDeviation="2" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+        <filter id="g13w"><feGaussianBlur stdDeviation="5" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
       </defs>
-      <!-- SAP → SFTP -->
-      <path id="v1" d="M70,80 C70,95 65,100 65,115" class="vpc-line" stroke="rgba(0,150,255,0.2)" stroke-width="1.5"/>
-      <circle r="4" fill="#00D4FF" filter="url(#glow)"><animateMotion dur="2.5s" repeatCount="indefinite"><mpath href="#v1"/></animateMotion></circle>
-      <path id="v1b" d="M170,80 C150,95 80,100 75,115" class="vpc-line" stroke="rgba(0,150,255,0.15)" stroke-width="1"/>
-      <circle r="3" fill="#4DA8FF" filter="url(#glow)"><animateMotion dur="3s" repeatCount="indefinite"><mpath href="#v1b"/></animateMotion></circle>
-      <path id="v1c" d="M270,80 C220,95 100,100 85,115" class="vpc-line" stroke="rgba(0,150,255,0.15)" stroke-width="1"/>
-      <circle r="3" fill="#4DA8FF" filter="url(#glow)"><animateMotion dur="3.5s" repeatCount="indefinite"><mpath href="#v1c"/></animateMotion></circle>
-      <!-- Axway → SFTP -->
-      <path id="v2" d="M850,75 C700,90 120,100 75,118" class="vpc-line" stroke="rgba(168,85,247,0.15)" stroke-width="1" stroke-dasharray="5,5"/>
-      <circle r="3.5" fill="#A855F7" filter="url(#glow)"><animateMotion dur="5s" repeatCount="indefinite"><mpath href="#v2"/></animateMotion></circle>
-      <!-- SFTP → Lambda -->
-      <path id="v3" d="M115,148 L225,148" class="vpc-line" stroke="rgba(0,212,255,0.25)" stroke-width="2"/>
-      <circle r="4" fill="#00D4FF" filter="url(#glow)"><animateMotion dur="1.8s" repeatCount="indefinite"><mpath href="#v3"/></animateMotion></circle>
-      <!-- Lambda → Step Fn -->
-      <path id="v4" d="M275,148 L405,148" class="vpc-line" stroke="rgba(255,140,66,0.3)" stroke-width="2"/>
-      <circle r="4.5" fill="#FF8C42" filter="url(#glow)"><animateMotion dur="1.5s" repeatCount="indefinite"><mpath href="#v4"/></animateMotion></circle>
-      <!-- Step Fn → S3 Landing -->
-      <path id="v5" d="M455,148 L575,148" class="vpc-line" stroke="rgba(168,85,247,0.25)" stroke-width="2"/>
-      <circle r="4" fill="#C084FC" filter="url(#glow)"><animateMotion dur="1.8s" repeatCount="indefinite"><mpath href="#v5"/></animateMotion></circle>
+
+      <!-- ══ FLOW 1: INBOUND (cyan) — SAP/Axway → SFTP → Lambda → StepFn → S3 ══ -->
+      <!-- SAP P2R → SFTP -->
+      <path id="f1a" d="M45,48 C90,55 130,70 155,100" class="vpc-line" stroke="rgba(0,180,255,0.18)" stroke-width="1.5"/>
+      <circle r="3.5" fill="#00D4FF" filter="url(#g13)"><animateMotion dur="2.2s" repeatCount="indefinite"><mpath href="#f1a"/></animateMotion></circle>
+      <circle r="2.5" fill="#00D4FF" filter="url(#g13s)"><animateMotion dur="2.2s" repeatCount="indefinite" begin="1.1s"><mpath href="#f1a"/></animateMotion></circle>
+      <!-- SAP P4S → SFTP -->
+      <path id="f1b" d="M93,48 C115,58 140,72 158,100" class="vpc-line" stroke="rgba(0,180,255,0.15)" stroke-width="1.2"/>
+      <circle r="3" fill="#4DA8FF" filter="url(#g13)"><animateMotion dur="2.5s" repeatCount="indefinite" begin="0.4s"><mpath href="#f1b"/></animateMotion></circle>
+      <!-- SAP MDM → SFTP -->
+      <path id="f1c" d="M45,118 C80,115 120,108 155,105" class="vpc-line" stroke="rgba(0,180,255,0.15)" stroke-width="1.2"/>
+      <circle r="3" fill="#4DA8FF" filter="url(#g13)"><animateMotion dur="2s" repeatCount="indefinite" begin="0.8s"><mpath href="#f1c"/></animateMotion></circle>
+      <!-- Axway → SFTP (dashed, purple) -->
+      <path id="f1d" d="M100,118 C115,115 130,108 155,105" class="vpc-line" stroke="rgba(168,85,247,0.18)" stroke-width="1.2" stroke-dasharray="4,4"/>
+      <circle r="3" fill="#A855F7" filter="url(#g13)"><animateMotion dur="3s" repeatCount="indefinite"><mpath href="#f1d"/></animateMotion></circle>
+      <circle r="2" fill="#C084FC" filter="url(#g13s)"><animateMotion dur="3s" repeatCount="indefinite" begin="1.5s"><mpath href="#f1d"/></animateMotion></circle>
+
+      <!-- SFTP → Lambda trigger -->
+      <path id="f2a" d="M195,113 L240,113" class="vpc-line" stroke="rgba(0,212,255,0.3)" stroke-width="2"/>
+      <circle r="4" fill="#00D4FF" filter="url(#g13)"><animateMotion dur="1.2s" repeatCount="indefinite"><mpath href="#f2a"/></animateMotion></circle>
+      <!-- trigger → fetch-src -->
+      <path id="f2b" d="M282,113 L310,113" class="vpc-line" stroke="rgba(255,140,66,0.3)" stroke-width="1.8"/>
+      <circle r="3.5" fill="#FF8C42" filter="url(#g13)"><animateMotion dur="0.8s" repeatCount="indefinite"><mpath href="#f2b"/></animateMotion></circle>
+      <!-- fetch-src → init-param -->
+      <path id="f2c" d="M350,113 L380,113" class="vpc-line" stroke="rgba(255,140,66,0.25)" stroke-width="1.5"/>
+      <circle r="3" fill="#FF8C42" filter="url(#g13s)"><animateMotion dur="0.8s" repeatCount="indefinite" begin="0.3s"><mpath href="#f2c"/></animateMotion></circle>
+      <!-- init-param → Step Functions -->
+      <path id="f2d" d="M420,113 L460,113" class="vpc-line" stroke="rgba(168,85,247,0.35)" stroke-width="2"/>
+      <circle r="4.5" fill="#C084FC" filter="url(#g13)"><animateMotion dur="1s" repeatCount="indefinite"><mpath href="#f2d"/></animateMotion></circle>
+      <circle r="3" fill="#A855F7" filter="url(#g13s)"><animateMotion dur="1s" repeatCount="indefinite" begin="0.5s"><mpath href="#f2d"/></animateMotion></circle>
+
+      <!-- Step Functions → S3 Landing -->
+      <path id="f3a" d="M480,138 C420,155 210,165 175,175" class="vpc-line" stroke="rgba(0,212,255,0.2)" stroke-width="1.8"/>
+      <circle r="4" fill="#00D4FF" filter="url(#g13)"><animateMotion dur="3s" repeatCount="indefinite"><mpath href="#f3a"/></animateMotion></circle>
+      <circle r="2.5" fill="#67E8F9" filter="url(#g13s)"><animateMotion dur="3s" repeatCount="indefinite" begin="1.5s"><mpath href="#f3a"/></animateMotion></circle>
       <!-- S3 Landing → S3 Raw -->
-      <path id="v6" d="M575,175 C575,190 70,195 60,210" class="vpc-line" stroke="rgba(0,212,255,0.15)" stroke-width="1.5"/>
-      <circle r="4" fill="#00D4FF" filter="url(#glow)"><animateMotion dur="4s" repeatCount="indefinite"><mpath href="#v6"/></animateMotion></circle>
-      <!-- S3 Raw → raw-job → model-job → rodb-job → enriched (chain) -->
-      <path id="v7" d="M100,243 L210,243" class="vpc-line" stroke="rgba(168,224,0,0.3)" stroke-width="2"/>
-      <circle r="4.5" fill="#A8E000" filter="url(#glow)"><animateMotion dur="2s" repeatCount="indefinite"><mpath href="#v7"/></animateMotion></circle>
-      <path id="v8" d="M255,243 L360,243" class="vpc-line" stroke="rgba(168,224,0,0.3)" stroke-width="2"/>
-      <circle r="4.5" fill="#A8E000" filter="url(#glow)"><animateMotion dur="2s" repeatCount="indefinite" begin="0.5s"><mpath href="#v8"/></animateMotion></circle>
-      <path id="v9" d="M405,243 L510,243" class="vpc-line" stroke="rgba(168,224,0,0.3)" stroke-width="2"/>
-      <circle r="4.5" fill="#A8E000" filter="url(#glow)"><animateMotion dur="2s" repeatCount="indefinite" begin="1s"><mpath href="#v9"/></animateMotion></circle>
-      <path id="v10" d="M555,243 L660,243" class="vpc-line" stroke="rgba(168,224,0,0.3)" stroke-width="2"/>
-      <circle r="4.5" fill="#A8E000" filter="url(#glow)"><animateMotion dur="2s" repeatCount="indefinite" begin="1.5s"><mpath href="#v10"/></animateMotion></circle>
-      <!-- model-job → Model N -->
-      <path id="v11" d="M365,270 C300,290 100,300 90,310" class="vpc-line" stroke="rgba(168,224,0,0.35)" stroke-width="2"/>
-      <circle r="5" fill="#BEF264" filter="url(#glow)"><animateMotion dur="3s" repeatCount="indefinite"><mpath href="#v11"/></animateMotion></circle>
-      <!-- rodb-job → Oracle -->
-      <path id="v12" d="M510,270 C470,290 300,300 285,310" class="vpc-line" stroke="rgba(168,85,247,0.25)" stroke-width="1.5"/>
-      <circle r="4" fill="#C084FC" filter="url(#glow)"><animateMotion dur="3s" repeatCount="indefinite"><mpath href="#v12"/></animateMotion></circle>
+      <path id="f3b" d="M195,188 L245,188" class="vpc-line" stroke="rgba(0,212,255,0.22)" stroke-width="1.8"/>
+      <circle r="3.5" fill="#00D4FF" filter="url(#g13)"><animateMotion dur="1.5s" repeatCount="indefinite"><mpath href="#f3b"/></animateMotion></circle>
+
+      <!-- ══ FLOW 7: TRIGGER (gold, dashed) — CloudWatch → Step Functions ══ -->
+      <path id="f7a" d="M640,115 C580,112 520,112 510,113" class="vpc-line" stroke="rgba(245,158,11,0.2)" stroke-width="1.2" stroke-dasharray="5,4"/>
+      <circle r="3" fill="#FCD34D" filter="url(#g13)"><animateMotion dur="2.5s" repeatCount="indefinite"><mpath href="#f7a"/></animateMotion></circle>
+      <circle r="2" fill="#F59E0B" filter="url(#g13s)"><animateMotion dur="2.5s" repeatCount="indefinite" begin="1.2s"><mpath href="#f7a"/></animateMotion></circle>
+      <!-- EventBridge → Step Functions -->
+      <path id="f7b" d="M710,115 C660,112 540,112 512,113" class="vpc-line" stroke="rgba(245,158,11,0.12)" stroke-width="1" stroke-dasharray="3,5"/>
+      <circle r="2.5" fill="#FCD34D" filter="url(#g13s)"><animateMotion dur="3s" repeatCount="indefinite" begin="0.7s"><mpath href="#f7b"/></animateMotion></circle>
+
+      <!-- ══ FLOW 2: ETL PROCESSING (green) — S3 Raw → Glue chain ══ -->
+      <!-- S3 Raw → raw-job -->
+      <path id="f4a" d="M270,195 C250,210 185,228 175,243" class="vpc-line" stroke="rgba(168,224,0,0.25)" stroke-width="2"/>
+      <circle r="4" fill="#A8E000" filter="url(#g13)"><animateMotion dur="2s" repeatCount="indefinite"><mpath href="#f4a"/></animateMotion></circle>
+      <!-- raw-job → model-job -->
+      <path id="f4b" d="M210,258 L250,258" class="vpc-line" stroke="rgba(168,224,0,0.3)" stroke-width="2"/>
+      <circle r="4.5" fill="#A8E000" filter="url(#g13)"><animateMotion dur="1.5s" repeatCount="indefinite"><mpath href="#f4b"/></animateMotion></circle>
+      <circle r="3" fill="#BEF264" filter="url(#g13s)"><animateMotion dur="1.5s" repeatCount="indefinite" begin="0.7s"><mpath href="#f4b"/></animateMotion></circle>
+      <!-- model-job → rodb-job -->
+      <path id="f4c" d="M300,258 L340,258" class="vpc-line" stroke="rgba(168,224,0,0.3)" stroke-width="2"/>
+      <circle r="4.5" fill="#A8E000" filter="url(#g13)"><animateMotion dur="1.5s" repeatCount="indefinite" begin="0.4s"><mpath href="#f4c"/></animateMotion></circle>
+      <!-- rodb-job → enriched-job -->
+      <path id="f4d" d="M390,258 L430,258" class="vpc-line" stroke="rgba(168,224,0,0.3)" stroke-width="2"/>
+      <circle r="4.5" fill="#A8E000" filter="url(#g13)"><animateMotion dur="1.5s" repeatCount="indefinite" begin="0.8s"><mpath href="#f4d"/></animateMotion></circle>
+      <!-- enriched-job → s3-to-sftp -->
+      <path id="f4e" d="M480,258 L520,258" class="vpc-line" stroke="rgba(168,224,0,0.25)" stroke-width="1.8"/>
+      <circle r="4" fill="#BEF264" filter="url(#g13)"><animateMotion dur="1.5s" repeatCount="indefinite" begin="1.2s"><mpath href="#f4e"/></animateMotion></circle>
+      <!-- enriched-job → S3 Enriched -->
+      <path id="f4f" d="M460,233 C420,210 360,195 335,188" class="vpc-line" stroke="rgba(0,212,255,0.15)" stroke-width="1.2"/>
+      <circle r="3" fill="#67E8F9" filter="url(#g13s)"><animateMotion dur="2.5s" repeatCount="indefinite"><mpath href="#f4f"/></animateMotion></circle>
+
+      <!-- ══ FLOW 3: DATA STORE (purple/teal) — Glue → Snowflake / Oracle ══ -->
       <!-- model-job → Snowflake -->
-      <path id="v13" d="M390,270 C420,290 450,300 460,310" class="vpc-line" stroke="rgba(20,184,166,0.3)" stroke-width="1.5"/>
-      <circle r="4" fill="#5EEAD4" filter="url(#glow)"><animateMotion dur="3s" repeatCount="indefinite"><mpath href="#v13"/></animateMotion></circle>
-      <!-- enriched → S3 Enriched -->
-      <path id="v14" d="M670,270 L620,310" class="vpc-line" stroke="rgba(0,212,255,0.2)" stroke-width="1.5"/>
-      <circle r="3.5" fill="#67E8F9" filter="url(#glow)"><animateMotion dur="2.5s" repeatCount="indefinite"><mpath href="#v14"/></animateMotion></circle>
-      <!-- Model N → Galaxy -->
-      <path id="v15" d="M90,370 C75,385 60,395 55,405" class="vpc-line" stroke="rgba(255,140,66,0.3)" stroke-width="1.5"/>
-      <circle r="4" fill="#FFB07A" filter="url(#glow)"><animateMotion dur="2.5s" repeatCount="indefinite"><mpath href="#v15"/></animateMotion></circle>
-      <!-- Snowflake → DBX-FI -->
-      <path id="v16" d="M460,370 C380,390 230,400 210,405" class="vpc-line" stroke="rgba(255,140,66,0.2)" stroke-width="1.5"/>
-      <circle r="3.5" fill="#FFB07A" filter="url(#glow)"><animateMotion dur="4s" repeatCount="indefinite"><mpath href="#v16"/></animateMotion></circle>
-      <!-- Model N → Outbound -->
-      <path id="v17" d="M140,370 C250,390 360,400 370,405" class="vpc-line" stroke="rgba(244,63,94,0.25)" stroke-width="1.5"/>
-      <circle r="4" fill="#FDA4AF" filter="url(#glow)"><animateMotion dur="3.5s" repeatCount="indefinite"><mpath href="#v17"/></animateMotion></circle>
-      <!-- CW Cron → Step Fn (dashed) -->
-      <path id="v18" d="M880,170 C700,165 480,155 455,150" class="vpc-line" stroke="rgba(245,158,11,0.15)" stroke-width="1" stroke-dasharray="4,4"/>
-      <circle r="2.5" fill="#FCD34D" filter="url(#glow)"><animateMotion dur="3.5s" repeatCount="indefinite"><mpath href="#v18"/></animateMotion></circle>
+      <path id="f5a" d="M270,280 C240,300 185,312 175,320" class="vpc-line" stroke="rgba(20,184,166,0.3)" stroke-width="2"/>
+      <circle r="4" fill="#5EEAD4" filter="url(#g13)"><animateMotion dur="2.5s" repeatCount="indefinite"><mpath href="#f5a"/></animateMotion></circle>
+      <circle r="3" fill="#14B8A6" filter="url(#g13s)"><animateMotion dur="2.5s" repeatCount="indefinite" begin="1.2s"><mpath href="#f5a"/></animateMotion></circle>
+      <!-- rodb-job → Oracle -->
+      <path id="f5b" d="M360,280 C340,295 310,310 300,318" class="vpc-line" stroke="rgba(168,85,247,0.3)" stroke-width="2"/>
+      <circle r="4" fill="#C084FC" filter="url(#g13)"><animateMotion dur="2.5s" repeatCount="indefinite" begin="0.5s"><mpath href="#f5b"/></animateMotion></circle>
+      <circle r="3" fill="#A855F7" filter="url(#g13s)"><animateMotion dur="2.5s" repeatCount="indefinite" begin="1.8s"><mpath href="#f5b"/></animateMotion></circle>
+      <!-- Step Functions → DynamoDB (state tracking) -->
+      <path id="f5c" d="M490,138 C480,220 440,300 420,318" class="vpc-line" stroke="rgba(245,158,11,0.12)" stroke-width="1" stroke-dasharray="3,4"/>
+      <circle r="2.5" fill="#FCD34D" filter="url(#g13s)"><animateMotion dur="4s" repeatCount="indefinite"><mpath href="#f5c"/></animateMotion></circle>
+
+      <!-- ══ FLOW 4: MODEL N DELIVERY (bright green) — VPC Connection → Model N ══ -->
+      <!-- VPC Connection → Model N -->
+      <path id="f6a" d="M640,258 C700,250 770,238 800,225" class="vpc-line" stroke="rgba(168,224,0,0.4)" stroke-width="2.5"/>
+      <circle r="5" fill="#BEF264" filter="url(#g13w)"><animateMotion dur="2s" repeatCount="indefinite"><mpath href="#f6a"/></animateMotion></circle>
+      <circle r="3.5" fill="#A8E000" filter="url(#g13)"><animateMotion dur="2s" repeatCount="indefinite" begin="0.8s"><mpath href="#f6a"/></animateMotion></circle>
+      <circle r="2.5" fill="#BEF264" filter="url(#g13s)"><animateMotion dur="2s" repeatCount="indefinite" begin="1.4s"><mpath href="#f6a"/></animateMotion></circle>
+      <!-- Oracle → Model N (data flow) -->
+      <path id="f6b" d="M340,318 C450,305 700,250 800,228" class="vpc-line" stroke="rgba(168,224,0,0.15)" stroke-width="1.2"/>
+      <circle r="3" fill="#BEF264" filter="url(#g13s)"><animateMotion dur="3.5s" repeatCount="indefinite" begin="1s"><mpath href="#f6b"/></animateMotion></circle>
+
+      <!-- ══ FLOW 5: OUTBOUND (rose/red) — Model N → SFTP → Axway ══ -->
+      <!-- Model N → Model N SFTP -->
+      <path id="f8a" d="M820,255 C825,290 825,330 820,350" class="vpc-line" stroke="rgba(244,63,94,0.25)" stroke-width="1.8"/>
+      <circle r="3.5" fill="#FDA4AF" filter="url(#g13)"><animateMotion dur="2s" repeatCount="indefinite"><mpath href="#f8a"/></animateMotion></circle>
+      <!-- s3-to-sftp → Model N SFTP -->
+      <path id="f8b" d="M560,268 C650,300 780,340 810,355" class="vpc-line" stroke="rgba(244,63,94,0.2)" stroke-width="1.5"/>
+      <circle r="4" fill="#F43F5E" filter="url(#g13)"><animateMotion dur="3s" repeatCount="indefinite"><mpath href="#f8b"/></animateMotion></circle>
+      <circle r="2.5" fill="#FDA4AF" filter="url(#g13s)"><animateMotion dur="3s" repeatCount="indefinite" begin="1.5s"><mpath href="#f8b"/></animateMotion></circle>
+      <!-- Model N SFTP → Axway (outbound, back to external) -->
+      <path id="f8c" d="M800,370 C600,420 200,380 100,130" class="vpc-line" stroke="rgba(244,63,94,0.1)" stroke-width="1" stroke-dasharray="4,5"/>
+      <circle r="2.5" fill="#FDA4AF" filter="url(#g13s)"><animateMotion dur="6s" repeatCount="indefinite"><mpath href="#f8c"/></animateMotion></circle>
+
+      <!-- ══ FLOW 6: REPORTING (amber) — Snowflake → Galaxy / DBX-FI ══ -->
+      <path id="f9a" d="M180,350 C175,365 165,378 162,388" class="vpc-line" stroke="rgba(255,140,66,0.25)" stroke-width="1.8"/>
+      <circle r="3.5" fill="#FFB07A" filter="url(#g13)"><animateMotion dur="2s" repeatCount="indefinite"><mpath href="#f9a"/></animateMotion></circle>
+      <path id="f9b" d="M200,350 C220,365 245,378 255,388" class="vpc-line" stroke="rgba(255,140,66,0.2)" stroke-width="1.5"/>
+      <circle r="3" fill="#FFB07A" filter="url(#g13s)"><animateMotion dur="2.5s" repeatCount="indefinite" begin="0.6s"><mpath href="#f9b"/></animateMotion></circle>
+      <!-- Snowflake → Snowflake Analytics -->
+      <path id="f9c" d="M215,350 C280,370 340,380 365,388" class="vpc-line" stroke="rgba(20,184,166,0.2)" stroke-width="1.5"/>
+      <circle r="3" fill="#5EEAD4" filter="url(#g13s)"><animateMotion dur="2.5s" repeatCount="indefinite" begin="1s"><mpath href="#f9c"/></animateMotion></circle>
+
+      <!-- ══ FLOW 8: AUDIT (dim) — services → CloudTrail → audit Lambda ══ -->
+      <path id="fa1" d="M490,138 C470,300 350,420 245,457" class="vpc-line" stroke="rgba(0,212,255,0.06)" stroke-width="0.8" stroke-dasharray="2,4"/>
+      <circle r="2" fill="rgba(103,232,249,0.5)" filter="url(#g13s)"><animateMotion dur="6s" repeatCount="indefinite"><mpath href="#fa1"/></animateMotion></circle>
+      <path id="fa2" d="M360,280 C340,370 300,430 250,457" class="vpc-line" stroke="rgba(0,212,255,0.04)" stroke-width="0.7" stroke-dasharray="2,5"/>
+      <circle r="1.5" fill="rgba(103,232,249,0.4)" filter="url(#g13s)"><animateMotion dur="7s" repeatCount="indefinite" begin="2s"><mpath href="#fa2"/></animateMotion></circle>
+
+      <!-- ══ Ambient floating particles (background life) ══ -->
+      <circle r="1" fill="rgba(0,212,255,0.15)">
+        <animateMotion dur="12s" repeatCount="indefinite" path="M100,100 C300,80 700,120 900,100 C700,130 300,90 100,100"/>
+      </circle>
+      <circle r="0.8" fill="rgba(168,224,0,0.12)">
+        <animateMotion dur="15s" repeatCount="indefinite" path="M200,300 C500,280 800,320 900,300 C600,330 300,290 200,300"/>
+      </circle>
+      <circle r="0.7" fill="rgba(168,85,247,0.1)">
+        <animateMotion dur="18s" repeatCount="indefinite" path="M50,200 C250,180 750,220 950,200 C750,230 250,190 50,200"/>
+      </circle>
     </svg>
 
-    <!-- Footer -->
-    <div class="vpc-footer">
-      <span>Terraform IaC</span><span>GitHub CI/CD</span><span>CloudTrail</span><span>KMS</span><span>IAM</span><span>CloudWatch</span><span>ServiceNow</span><span>DynamoDB</span><span>Secrets Mgr</span>
+    <!-- ═══ LEGEND ═══ -->
+    <div class="ntd-legend">
+      <div class="ntd-legend-item"><div class="ntd-legend-dot" style="background:#00D4FF;box-shadow:0 0 4px #00D4FF;"></div>Inbound</div>
+      <div class="ntd-legend-item"><div class="ntd-legend-dot" style="background:#A8E000;box-shadow:0 0 4px #A8E000;"></div>ETL Processing</div>
+      <div class="ntd-legend-item"><div class="ntd-legend-dot" style="background:#5EEAD4;box-shadow:0 0 4px #5EEAD4;"></div>Snowflake</div>
+      <div class="ntd-legend-item"><div class="ntd-legend-dot" style="background:#C084FC;box-shadow:0 0 4px #C084FC;"></div>Oracle RODB</div>
+      <div class="ntd-legend-item"><div class="ntd-legend-dot" style="background:#BEF264;box-shadow:0 0 4px #BEF264;"></div>Model N Delivery</div>
+      <div class="ntd-legend-item"><div class="ntd-legend-dot" style="background:#F43F5E;box-shadow:0 0 4px #F43F5E;"></div>Outbound</div>
+      <div class="ntd-legend-item"><div class="ntd-legend-dot" style="background:#FFB07A;box-shadow:0 0 4px #FFB07A;"></div>Reporting</div>
+      <div class="ntd-legend-item"><div class="ntd-legend-dot" style="background:#FCD34D;box-shadow:0 0 4px #FCD34D;"></div>Cron Triggers</div>
+      <div class="ntd-legend-item"><div class="ntd-legend-dot" style="background:#A855F7;box-shadow:0 0 4px #A855F7;"></div>Partner EDI</div>
     </div>
+
   </div>
 </section>
 
