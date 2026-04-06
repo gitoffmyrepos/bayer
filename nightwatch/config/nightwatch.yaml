@@ -30,6 +30,9 @@ alerting:
   dedup_window_seconds: 300
   discord:
     webhook_url: ${DISCORD_WEBHOOK_URL}
+    enabled: false  # Disabled — migrated to Telegram
+  telegram:
+    webhook_url: http://localhost:8765/alert
 
 # ─── Repos (for GitOps auto-remediation) ─────────────────────────────────────
 repos:

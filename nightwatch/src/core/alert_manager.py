@@ -82,6 +82,9 @@ class AlertManager:
         self.discord_config = alerting_config.get("discord", {})
         self.pagerduty_config = alerting_config.get("pagerduty", {})
         self.email_config = alerting_config.get("email", {})
+        self.telegram_config = alerting_config.get("telegram", {})
+        # Discord can be disabled when migrating to Telegram
+        self._discord_enabled = self.discord_config.get("enabled", True)
 
         # Track recently sent alerts to avoid spam (alert deduplication)
         self._recent_alerts: dict[str, datetime] = {}
@@ -129,8 +132,11 @@ class AlertManager:
         if self.slack_config.get("webhook_url"):
             tasks.append(("slack", self._send_slack(title, body, severity, application, metadata, emoji)))
 
-        if self.discord_config.get("webhook_url"):
+        if self.discord_config.get("webhook_url") and self._discord_enabled:
             tasks.append(("discord", self._send_discord(title, body, severity, application, metadata, emoji)))
+
+        if self.telegram_config.get("webhook_url"):
+            tasks.append(("telegram", self._send_telegram(title, body, severity, application, metadata)))
 
         if self.pagerduty_config.get("routing_key"):
             tasks.append(("pagerduty", self._send_pagerduty(title, body, severity, application, metadata, incident_id)))
@@ -195,6 +201,41 @@ class AlertManager:
 
         log.info("slack_alert_sent", title=title)
         return True
+
+    # ─── Telegram (via Nova Agents webhook) ────────────────────────────────
+
+    async def _send_telegram(
+        self,
+        title: str,
+        body: str,
+        severity: str,
+        application: str,
+        metadata: Optional[dict] = None,
+    ) -> bool:
+        """Send alert to Nova Telegram agent via webhook receiver."""
+        url = self.telegram_config.get("webhook_url", "http://localhost:8765/alert")
+        try:
+            async with httpx.AsyncClient() as client:
+                resp = await client.post(
+                    url,
+                    json={
+                        "source": f"nightwatch/{application}",
+                        "severity": severity,
+                        "message": f"{title}\n\n{body}",
+                        "recommendation": metadata.get("recommendation", "") if metadata else "",
+                        "auto_fix": metadata.get("auto_fix", "") if metadata else "",
+                        "application": application,
+                        "incident_id": metadata.get("incident_id", "") if metadata else "",
+                    },
+                    timeout=10.0,
+                )
+                if resp.status_code == 200:
+                    log.info("telegram_alert_sent", title=title)
+                    return True
+                log.warning("telegram_alert_failed", status=resp.status_code)
+        except Exception as e:
+            log.error("telegram_alert_error", error=str(e))
+        return False
 
     # ─── Discord ─────────────────────────────────────────────────────────────
 
