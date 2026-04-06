@@ -1333,211 +1333,158 @@ section.present .anim-fade  { animation:fadeIn       0.5s  ease forwards; }
   </div>
 </section>
 
-<!-- ================================================================
-     SLIDE 12: GRAND FINALE
-     ================================================================ -->
-<section data-transition="fade">
-  <span class="slide-tag will-animate anim-fade d0">End-to-End Summary</span>
-  <div class="slide-title will-animate">The Complete Data Journey</div>
-  <p class="slide-subtitle will-animate">
-    From SAP source systems through the AWS data platform to Model N and business reporting -- every byte of data follows a governed, auditable, and automated path. This architecture ensures data integrity, regulatory compliance, and operational efficiency across Bayer's pharmaceutical revenue management operations.
-  </p>
-
-  <!-- Animated pipeline visualization -->
-  <div class="finale-pipeline will-animate anim-fade d3" style="margin-bottom:20px;">
-    <div class="finale-node" style="border-color:rgba(0,212,255,0.3);">SAP<br><span style="font-size:0.7rem;color:var(--t3);">P2R, P4S, MDM</span></div>
-    <div class="finale-arrow"></div>
-    <div class="finale-node" style="border-color:rgba(0,212,255,0.3);">Landing<br><span style="font-size:0.7rem;color:var(--t3);">S3</span></div>
-    <div class="finale-arrow"></div>
-    <div class="finale-node" style="border-color:rgba(0,212,255,0.3);">Raw<br><span style="font-size:0.7rem;color:var(--t3);">Immutable</span></div>
-    <div class="finale-arrow"></div>
-    <div class="finale-node" style="border-color:rgba(168,224,0,0.3);">Enriched<br><span style="font-size:0.7rem;color:var(--t3);">Glue + DQC</span></div>
-    <div class="finale-arrow"></div>
-    <div class="finale-node" style="border-color:rgba(168,224,0,0.4);background:rgba(168,224,0,0.06);">Model N<br><span style="font-size:0.7rem;color:var(--t3);">PhyN Suite</span></div>
-    <div class="finale-arrow"></div>
-    <div class="finale-node" style="border-color:rgba(168,224,0,0.3);">Reports<br><span style="font-size:0.7rem;color:var(--t3);">Galaxy, DBX</span></div>
-  </div>
-
-  <div class="grid-3" style="margin-bottom:18px;">
-    <div class="card will-animate anim-up d5 fragment fade-up" style="text-align:center;">
-      <div class="card-icon">&#128202;</div>
-      <div class="card-title">Daily Data Volumes</div>
-      <div class="card-body" style="font-size:0.88rem;">
-        Hundreds of thousands of sales transactions, thousands of inventory positions, payment records, and master data changes flowing through the pipeline every day.
-      </div>
-    </div>
-    <div class="card will-animate anim-up d7 fragment fade-up" style="text-align:center;">
-      <div class="card-icon">&#128274;</div>
-      <div class="card-title">Fully Governed</div>
-      <div class="card-body" style="font-size:0.88rem;">
-        Every access logged via CloudTrail, every resource defined in Terraform, every deployment reviewed via GitHub PRs, every incident tracked in ServiceNow.
-      </div>
-    </div>
-    <div class="card will-animate anim-up d9 fragment fade-up" style="text-align:center;">
-      <div class="card-icon">&#9989;</div>
-      <div class="card-title">Production Ready</div>
-      <div class="card-body" style="font-size:0.88rem;">
-        Four-environment promotion path with automated testing, SOX-compliant audit trails, encrypted data at rest and in transit, and 24/7 operational monitoring.
-      </div>
-    </div>
-  </div>
-
-  <!-- Key stats + Thank You merged from slide 20 -->
-  <div style="display:flex;gap:20px;flex-wrap:wrap;justify-content:center;margin-bottom:14px;" class="will-animate anim-fade d11 fragment fade-up">
-    <div style="text-align:center;"><div style="font-size:1.6rem;font-weight:800;color:var(--bl);">8</div><div style="font-size:0.72rem;color:var(--t3);">Lambda Functions</div></div>
-    <div style="width:1px;background:rgba(0,212,255,0.15);"></div>
-    <div style="text-align:center;"><div style="font-size:1.6rem;font-weight:800;color:var(--bg-c);">6</div><div style="font-size:0.72rem;color:var(--t3);">Glue ETL Jobs</div></div>
-    <div style="width:1px;background:rgba(0,212,255,0.15);"></div>
-    <div style="text-align:center;"><div style="font-size:1.6rem;font-weight:800;color:var(--purple);">23</div><div style="font-size:0.72rem;color:var(--t3);">Scheduled Triggers</div></div>
-    <div style="width:1px;background:rgba(0,212,255,0.15);"></div>
-    <div style="text-align:center;"><div style="font-size:1.6rem;font-weight:800;color:var(--orange);">4</div><div style="font-size:0.72rem;color:var(--t3);">AWS Environments</div></div>
-    <div style="width:1px;background:rgba(0,212,255,0.15);"></div>
-    <div style="text-align:center;"><div style="font-size:1.6rem;font-weight:800;color:var(--teal);">5+</div><div style="font-size:0.72rem;color:var(--t3);">Partners</div></div>
-  </div>
-
-  <div class="will-animate anim-fade d13" style="text-align:center;padding:14px;border-radius:10px;background:linear-gradient(135deg,rgba(0,114,229,0.1),rgba(168,224,0,0.08));border:1px solid rgba(0,212,255,0.2);">
-    <p style="font-size:1.05rem;font-weight:600;color:var(--t1);margin-bottom:4px;">
-      Thank You &mdash; Bayer AG Pharma Revenue Management
-    </p>
-    <p style="font-size:0.82rem;color:var(--t3);">
-      Government Pricing &bull; Commercial Contracting &bull; Medicaid Rebates &bull; Chargeback Management &bull; 340B Compliance
-    </p>
-    <div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:center;margin-top:8px;">
-      <span class="tech-pill" style="font-size:0.68rem;">AWS</span>
-      <span class="tech-pill" style="font-size:0.68rem;">Terraform</span>
-      <span class="tech-pill" style="font-size:0.68rem;border-color:rgba(168,224,0,0.3);color:var(--bg-c);">Snowflake</span>
-      <span class="tech-pill" style="font-size:0.68rem;">Model N PhyN</span>
-      <span class="tech-pill" style="font-size:0.68rem;border-color:rgba(168,85,247,0.3);color:var(--purple);">Oracle RODB</span>
-      <span class="tech-pill" style="font-size:0.68rem;">SAP</span>
-      <span class="tech-pill" style="font-size:0.68rem;">GitHub Actions</span>
-    </div>
-  </div>
-</section>
+<!-- Slide 12 removed — moved to end as the closing slide -->
 
 <!-- ================================================================
-     SLIDE 13: FUNCTIONAL ARCHITECTURE DIAGRAM
+     SLIDE 13: ANIMATED NETWORK TRAFFIC DIAGRAM (VPC-style)
      ================================================================ -->
-<section data-transition="fade">
-  <span class="slide-tag will-animate anim-fade d0">Live Network Diagram</span>
-  <div class="slide-title will-animate" style="font-size:1.6rem;">Model N &mdash; ETL Data Pipeline Network</div>
+<section data-transition="fade" data-background="#060B18">
+  <div class="slide-title will-animate" style="font-size:1.4rem;margin-bottom:2px;text-align:center;">Model N &mdash; Data Pipeline Network Traffic</div>
 
   <style>
-    .net-canvas { position:relative; width:100%; height:520px; overflow:hidden; background:radial-gradient(ellipse at center, rgba(0,114,229,0.04) 0%, transparent 70%); border-radius:12px; border:1px solid rgba(0,212,255,0.1); }
-    /* Nodes */
-    .net-node { position:absolute; padding:6px 10px; border-radius:8px; font-size:0.58rem; font-weight:600; text-align:center; border:1.5px solid; backdrop-filter:blur(4px); z-index:10; transition:all 0.3s; cursor:default; line-height:1.3; }
-    .net-node:hover { transform:scale(1.15); z-index:20; box-shadow:0 0 20px var(--glow-blue); }
-    .net-node .nn-icon { font-size:1rem; display:block; margin-bottom:2px; }
-    /* Glowing connection lines — SVG paths with animated dots */
-    .net-svg { position:absolute; top:0; left:0; width:100%; height:100%; z-index:1; pointer-events:none; }
-    .net-path { fill:none; stroke-width:1.5; opacity:0.3; }
-    .net-dot { r:3; opacity:0.9; filter:drop-shadow(0 0 4px currentColor); }
-    /* Animate dots along paths */
-    @keyframes flowPath { 0%{offset-distance:0%} 100%{offset-distance:100%} }
-    .flow-particle { position:absolute; width:5px; height:5px; border-radius:50%; z-index:5; offset-rotate:0deg; animation:flowPath var(--dur, 4s) linear infinite; filter:blur(0.5px); }
-    /* Platform bar */
-    .net-platform { position:absolute; bottom:0; left:0; right:0; padding:6px 12px; background:linear-gradient(180deg,transparent,rgba(0,20,40,0.8)); border-top:1px dashed rgba(0,212,255,0.15); display:flex; gap:6px; justify-content:center; flex-wrap:wrap; z-index:15; }
-    .net-platform span { font-size:0.55rem; color:var(--t3); padding:2px 6px; border:1px solid rgba(0,212,255,0.1); border-radius:3px; }
+    .vpc-canvas { position:relative; width:100%; height:540px; background:#060B18; border-radius:10px; border:1px solid rgba(0,212,255,0.08); overflow:hidden; }
+    /* Zone boxes like VPC subnets */
+    .vpc-zone { position:absolute; border:1.5px dashed; border-radius:10px; padding:6px 8px; }
+    .vpc-zone-label { font-size:0.55rem; font-weight:700; text-transform:uppercase; letter-spacing:1px; margin-bottom:4px; }
+    /* Nodes — larger, with glow */
+    .vpc-node { position:absolute; width:68px; height:60px; border-radius:8px; border:1.5px solid; display:flex; flex-direction:column; align-items:center; justify-content:center; font-size:0.5rem; font-weight:600; text-align:center; z-index:10; transition:all 0.3s; }
+    .vpc-node:hover { transform:scale(1.2); z-index:20; }
+    .vpc-node .vpc-icon { font-size:1.3rem; margin-bottom:2px; filter:drop-shadow(0 0 6px currentColor); }
+    /* SVG lines + animated glowing dots */
+    .vpc-svg { position:absolute; top:0; left:0; width:100%; height:100%; z-index:2; pointer-events:none; }
+    .vpc-line { fill:none; stroke-width:1.5; }
+    .vpc-glow { filter:drop-shadow(0 0 6px currentColor); }
+    /* Footer */
+    .vpc-footer { position:absolute; bottom:0; left:0; right:0; padding:5px 10px; background:rgba(6,11,24,0.9); border-top:1px solid rgba(0,212,255,0.08); display:flex; gap:6px; justify-content:center; flex-wrap:wrap; z-index:15; }
+    .vpc-footer span { font-size:0.48rem; color:rgba(255,255,255,0.35); padding:1px 5px; border:1px solid rgba(0,212,255,0.08); border-radius:3px; }
   </style>
 
-  <div class="net-canvas will-animate anim-fade d2">
-    <!-- === NODES === -->
-    <!-- Layer 1: Source Systems (top) -->
-    <div class="net-node" style="top:12px;left:4%;border-color:rgba(0,114,229,0.5);background:rgba(0,114,229,0.1);color:var(--bl);"><span class="nn-icon">🏭</span>SAP P2R</div>
-    <div class="net-node" style="top:12px;left:18%;border-color:rgba(0,114,229,0.5);background:rgba(0,114,229,0.1);color:var(--bl);"><span class="nn-icon">🏭</span>SAP P4S</div>
-    <div class="net-node" style="top:12px;left:32%;border-color:rgba(0,114,229,0.5);background:rgba(0,114,229,0.1);color:var(--bl);"><span class="nn-icon">📋</span>SAP MDM</div>
-    <div class="net-node" style="top:12px;left:80%;border-color:rgba(168,85,247,0.5);background:rgba(168,85,247,0.08);color:var(--purple);"><span class="nn-icon">🔄</span>Axway EDI</div>
+  <div class="vpc-canvas will-animate anim-fade d1">
 
-    <!-- Layer 2: Ingestion (SFTP + Lambda + S3) -->
-    <div class="net-node" style="top:95px;left:8%;border-color:rgba(0,212,255,0.4);background:rgba(0,212,255,0.06);"><span class="nn-icon">📥</span>AWS SFTP</div>
-    <div class="net-node" style="top:95px;left:28%;border-color:rgba(255,140,66,0.4);background:rgba(255,140,66,0.06);color:var(--orange);"><span class="nn-icon">⚡</span>sftp-trigger<br><span style="font-size:0.48rem;color:var(--t3);">Lambda</span></div>
-    <div class="net-node" style="top:95px;left:50%;border-color:rgba(168,85,247,0.4);background:rgba(168,85,247,0.06);color:var(--purple);"><span class="nn-icon">🔀</span>Step Function<br><span style="font-size:0.48rem;color:var(--t3);">jobs-wrkflw</span></div>
-    <div class="net-node" style="top:95px;left:72%;border-color:rgba(0,212,255,0.4);background:rgba(0,212,255,0.06);"><span class="nn-icon">☁️</span>S3 Landing</div>
+    <!-- ═══ ZONE BOXES (like VPC subnets) ═══ -->
+    <div class="vpc-zone" style="top:8px;left:2%;width:42%;height:80px;border-color:rgba(0,114,229,0.2);background:rgba(0,114,229,0.03);">
+      <div class="vpc-zone-label" style="color:rgba(0,114,229,0.5);">Source Systems (SAP / Partners)</div>
+    </div>
+    <div class="vpc-zone" style="top:8px;right:2%;width:18%;height:80px;border-color:rgba(168,85,247,0.2);background:rgba(168,85,247,0.02);">
+      <div class="vpc-zone-label" style="color:rgba(168,85,247,0.5);">External</div>
+    </div>
+    <div class="vpc-zone" style="top:100px;left:2%;width:72%;height:80px;border-color:rgba(0,212,255,0.15);background:rgba(0,212,255,0.02);">
+      <div class="vpc-zone-label" style="color:rgba(0,212,255,0.4);">Ingestion Layer &mdash; AWS Transfer + Lambda + Step Functions</div>
+    </div>
+    <div class="vpc-zone" style="top:195px;left:2%;width:85%;height:80px;border-color:rgba(168,224,0,0.15);background:rgba(168,224,0,0.02);">
+      <div class="vpc-zone-label" style="color:rgba(168,224,0,0.4);">Processing Layer &mdash; AWS Glue ETL (6 Jobs)</div>
+    </div>
+    <div class="vpc-zone" style="top:290px;left:2%;width:92%;height:80px;border-color:rgba(168,224,0,0.2);background:rgba(168,224,0,0.02);">
+      <div class="vpc-zone-label" style="color:rgba(168,224,0,0.5);">Consumption &mdash; Model N + Oracle + Snowflake</div>
+    </div>
+    <div class="vpc-zone" style="top:385px;left:2%;width:92%;height:80px;border-color:rgba(255,140,66,0.15);background:rgba(255,140,66,0.02);">
+      <div class="vpc-zone-label" style="color:rgba(255,140,66,0.4);">Reporting &amp; Outbound</div>
+    </div>
 
-    <!-- Layer 3: Processing (Glue + S3 zones) -->
-    <div class="net-node" style="top:190px;left:3%;border-color:rgba(0,212,255,0.3);background:rgba(0,212,255,0.05);"><span class="nn-icon">📦</span>S3 Raw<br><span style="font-size:0.48rem;color:var(--t3);">Immutable</span></div>
-    <div class="net-node" style="top:190px;left:20%;border-color:rgba(168,224,0,0.4);background:rgba(168,224,0,0.06);color:var(--bg-c);"><span class="nn-icon">⚙️</span>Glue: raw-job</div>
-    <div class="net-node" style="top:190px;left:38%;border-color:rgba(168,224,0,0.4);background:rgba(168,224,0,0.06);color:var(--bg-c);"><span class="nn-icon">⚙️</span>Glue: model-job<br><span style="font-size:0.48rem;color:var(--t3);">Snowflake SPs</span></div>
-    <div class="net-node" style="top:190px;left:58%;border-color:rgba(168,224,0,0.4);background:rgba(168,224,0,0.06);color:var(--bg-c);"><span class="nn-icon">⚙️</span>Glue: rodb-job</div>
-    <div class="net-node" style="top:190px;left:76%;border-color:rgba(168,224,0,0.4);background:rgba(168,224,0,0.06);color:var(--bg-c);"><span class="nn-icon">⚙️</span>Glue: enriched</div>
+    <!-- ═══ NODES ═══ -->
+    <!-- Source row -->
+    <div class="vpc-node" style="top:30px;left:4%;border-color:rgba(0,114,229,0.4);background:rgba(0,114,229,0.08);color:#4DA8FF;"><span class="vpc-icon">🏭</span>SAP P2R</div>
+    <div class="vpc-node" style="top:30px;left:14%;border-color:rgba(0,114,229,0.4);background:rgba(0,114,229,0.08);color:#4DA8FF;"><span class="vpc-icon">🏭</span>SAP P4S</div>
+    <div class="vpc-node" style="top:30px;left:24%;border-color:rgba(0,114,229,0.4);background:rgba(0,114,229,0.08);color:#4DA8FF;"><span class="vpc-icon">📋</span>SAP MDM</div>
+    <div class="vpc-node" style="top:30px;left:34%;border-color:rgba(0,114,229,0.4);background:rgba(0,114,229,0.08);color:#4DA8FF;"><span class="vpc-icon">📥</span>SFTP MFT</div>
+    <div class="vpc-node" style="top:30px;right:5%;border-color:rgba(168,85,247,0.5);background:rgba(168,85,247,0.08);color:#C084FC;"><span class="vpc-icon">🔄</span>Axway EDI</div>
 
-    <!-- Layer 4: Consume (Model N + Oracle + Snowflake) -->
-    <div class="net-node" style="top:290px;left:8%;border-color:rgba(168,224,0,0.5);background:rgba(168,224,0,0.08);color:var(--bg-c);font-weight:800;font-size:0.65rem;padding:8px 14px;"><span class="nn-icon" style="font-size:1.2rem;">🏛️</span>Model N PhyN<br><span style="font-size:0.48rem;color:var(--t3);">Gov Pricing · Medicaid · 340B</span></div>
-    <div class="net-node" style="top:290px;left:40%;border-color:rgba(168,85,247,0.4);background:rgba(168,85,247,0.06);color:var(--purple);"><span class="nn-icon">🗃️</span>Oracle RODB</div>
-    <div class="net-node" style="top:290px;left:60%;border-color:rgba(20,184,166,0.4);background:rgba(20,184,166,0.06);color:var(--teal);"><span class="nn-icon">❄️</span>Snowflake<br><span style="font-size:0.48rem;color:var(--t3);">Stored Procs</span></div>
-    <div class="net-node" style="top:290px;left:80%;border-color:rgba(0,212,255,0.3);background:rgba(0,212,255,0.05);"><span class="nn-icon">📦</span>S3 Enriched</div>
+    <!-- Ingestion row -->
+    <div class="vpc-node" style="top:118px;left:5%;border-color:rgba(0,212,255,0.4);background:rgba(0,212,255,0.06);color:#67E8F9;"><span class="vpc-icon">📥</span>AWS SFTP<br>Transfer</div>
+    <div class="vpc-node" style="top:118px;left:20%;border-color:rgba(255,140,66,0.5);background:rgba(255,140,66,0.08);color:#FFB07A;"><span class="vpc-icon">⚡</span>Lambda<br>Trigger</div>
+    <div class="vpc-node" style="top:118px;left:38%;border-color:rgba(168,85,247,0.5);background:rgba(168,85,247,0.06);color:#C084FC;"><span class="vpc-icon">🔀</span>Step Fn<br>Workflow</div>
+    <div class="vpc-node" style="top:118px;left:55%;border-color:rgba(0,212,255,0.4);background:rgba(0,212,255,0.06);color:#67E8F9;"><span class="vpc-icon">☁️</span>S3<br>Landing</div>
 
-    <!-- Layer 5: Outbound + Reporting -->
-    <div class="net-node" style="top:390px;left:5%;border-color:rgba(255,140,66,0.4);background:rgba(255,140,66,0.06);color:var(--orange);"><span class="nn-icon">📊</span>Galaxy Reports</div>
-    <div class="net-node" style="top:390px;left:24%;border-color:rgba(255,140,66,0.4);background:rgba(255,140,66,0.06);color:var(--orange);"><span class="nn-icon">📈</span>DBX-FI</div>
-    <div class="net-node" style="top:390px;left:44%;border-color:rgba(244,63,94,0.4);background:rgba(244,63,94,0.06);color:var(--rose);"><span class="nn-icon">📤</span>s3-to-sftp<br><span style="font-size:0.48rem;color:var(--t3);">Outbound Glue</span></div>
-    <div class="net-node" style="top:390px;left:64%;border-color:rgba(255,140,66,0.3);background:rgba(255,140,66,0.05);"><span class="nn-icon">📧</span>Email Lambda<br><span style="font-size:0.48rem;color:var(--t3);">Error Alerts</span></div>
-    <div class="net-node" style="top:390px;left:82%;border-color:rgba(0,114,229,0.3);background:rgba(0,114,229,0.06);"><span class="nn-icon">📝</span>Audit Lambda<br><span style="font-size:0.48rem;color:var(--t3);">capture-audit</span></div>
+    <!-- Processing row -->
+    <div class="vpc-node" style="top:213px;left:4%;border-color:rgba(0,212,255,0.3);background:rgba(0,212,255,0.04);color:#67E8F9;"><span class="vpc-icon">📦</span>S3 Raw</div>
+    <div class="vpc-node" style="top:213px;left:18%;border-color:rgba(168,224,0,0.5);background:rgba(168,224,0,0.06);color:#BEF264;"><span class="vpc-icon">⚙️</span>raw-job</div>
+    <div class="vpc-node" style="top:213px;left:33%;border-color:rgba(168,224,0,0.5);background:rgba(168,224,0,0.06);color:#BEF264;"><span class="vpc-icon">⚙️</span>model-job</div>
+    <div class="vpc-node" style="top:213px;left:48%;border-color:rgba(168,224,0,0.5);background:rgba(168,224,0,0.06);color:#BEF264;"><span class="vpc-icon">⚙️</span>rodb-job</div>
+    <div class="vpc-node" style="top:213px;left:63%;border-color:rgba(168,224,0,0.5);background:rgba(168,224,0,0.06);color:#BEF264;"><span class="vpc-icon">⚙️</span>enriched</div>
 
-    <!-- Monitoring side nodes -->
-    <div class="net-node" style="top:145px;right:2%;border-color:rgba(245,158,11,0.4);background:rgba(245,158,11,0.06);color:var(--amber);font-size:0.52rem;"><span class="nn-icon" style="font-size:0.8rem;">⏰</span>CloudWatch<br>23 Cron Triggers</div>
-    <div class="net-node" style="top:240px;right:2%;border-color:rgba(0,114,229,0.3);background:rgba(0,114,229,0.04);font-size:0.52rem;"><span class="nn-icon" style="font-size:0.8rem;">🔐</span>Secrets Mgr<br>KMS + IAM</div>
+    <!-- Consume row -->
+    <div class="vpc-node" style="top:308px;left:5%;width:90px;border-color:rgba(168,224,0,0.6);background:rgba(168,224,0,0.08);color:#BEF264;font-weight:800;"><span class="vpc-icon" style="font-size:1.5rem;">🏛️</span>Model N<br>PhyN Suite</div>
+    <div class="vpc-node" style="top:308px;left:25%;border-color:rgba(168,85,247,0.5);background:rgba(168,85,247,0.06);color:#C084FC;"><span class="vpc-icon">🗃️</span>Oracle<br>RODB</div>
+    <div class="vpc-node" style="top:308px;left:42%;border-color:rgba(20,184,166,0.5);background:rgba(20,184,166,0.06);color:#5EEAD4;"><span class="vpc-icon">❄️</span>Snowflake</div>
+    <div class="vpc-node" style="top:308px;left:58%;border-color:rgba(0,212,255,0.3);background:rgba(0,212,255,0.04);color:#67E8F9;"><span class="vpc-icon">📦</span>S3<br>Enriched</div>
 
-    <!-- === ANIMATED FLOW PARTICLES (SVG paths with moving dots) === -->
-    <svg class="net-svg" viewBox="0 0 1000 520" preserveAspectRatio="none">
-      <!-- SAP P2R → SFTP -->
-      <path id="p1" d="M80,45 C80,70 100,80 100,100" class="net-path" stroke="rgba(0,114,229,0.3)"/>
-      <circle class="net-dot" fill="#0072E5"><animateMotion dur="3s" repeatCount="indefinite"><mpath href="#p1"/></animateMotion></circle>
-      <!-- SAP P4S → SFTP -->
-      <path id="p2" d="M220,45 C200,70 120,80 120,100" class="net-path" stroke="rgba(0,114,229,0.3)"/>
-      <circle class="net-dot" fill="#0072E5"><animateMotion dur="3.5s" repeatCount="indefinite"><mpath href="#p2"/></animateMotion></circle>
-      <!-- SFTP → Lambda trigger -->
-      <path id="p3" d="M120,130 L310,130" class="net-path" stroke="rgba(0,212,255,0.3)"/>
-      <circle class="net-dot" fill="#00D4FF"><animateMotion dur="2s" repeatCount="indefinite"><mpath href="#p3"/></animateMotion></circle>
-      <!-- Lambda → Step Function -->
-      <path id="p4" d="M350,130 L530,130" class="net-path" stroke="rgba(255,140,66,0.3)"/>
-      <circle class="net-dot" fill="#FF8C42"><animateMotion dur="1.5s" repeatCount="indefinite"><mpath href="#p4"/></animateMotion></circle>
-      <!-- Step Function → S3 Landing -->
-      <path id="p5" d="M570,130 L750,130" class="net-path" stroke="rgba(168,85,247,0.3)"/>
-      <circle class="net-dot" fill="#A855F7"><animateMotion dur="2s" repeatCount="indefinite"><mpath href="#p5"/></animateMotion></circle>
+    <!-- Report/Outbound row -->
+    <div class="vpc-node" style="top:403px;left:4%;border-color:rgba(255,140,66,0.5);background:rgba(255,140,66,0.06);color:#FFB07A;"><span class="vpc-icon">📊</span>Galaxy<br>Reports</div>
+    <div class="vpc-node" style="top:403px;left:18%;border-color:rgba(255,140,66,0.5);background:rgba(255,140,66,0.06);color:#FFB07A;"><span class="vpc-icon">📈</span>DBX-FI</div>
+    <div class="vpc-node" style="top:403px;left:33%;border-color:rgba(244,63,94,0.5);background:rgba(244,63,94,0.06);color:#FDA4AF;"><span class="vpc-icon">📤</span>s3-to-sftp<br>Outbound</div>
+    <div class="vpc-node" style="top:403px;left:48%;border-color:rgba(255,140,66,0.4);background:rgba(255,140,66,0.04);color:#FFB07A;"><span class="vpc-icon">📧</span>Email<br>Alerts</div>
+    <div class="vpc-node" style="top:403px;left:63%;border-color:rgba(0,114,229,0.4);background:rgba(0,114,229,0.05);color:#4DA8FF;"><span class="vpc-icon">📝</span>Audit<br>Lambda</div>
+
+    <!-- Side nodes -->
+    <div class="vpc-node" style="top:135px;right:3%;width:72px;border-color:rgba(245,158,11,0.5);background:rgba(245,158,11,0.06);color:#FCD34D;"><span class="vpc-icon">⏰</span>CW Cron<br>23 Triggers</div>
+    <div class="vpc-node" style="top:240px;right:3%;width:72px;border-color:rgba(0,114,229,0.3);background:rgba(0,114,229,0.04);color:#4DA8FF;"><span class="vpc-icon">🔐</span>Secrets<br>KMS+IAM</div>
+    <div class="vpc-node" style="top:340px;right:3%;width:72px;border-color:rgba(245,158,11,0.3);background:rgba(245,158,11,0.03);color:#FCD34D;"><span class="vpc-icon">🏗️</span>Terraform<br>IaC</div>
+
+    <!-- ═══ SVG ANIMATED PATHS + GLOWING DOTS ═══ -->
+    <svg class="vpc-svg" viewBox="0 0 1000 540" preserveAspectRatio="none">
+      <defs>
+        <filter id="glow"><feGaussianBlur stdDeviation="3" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+      </defs>
+      <!-- SAP → SFTP -->
+      <path id="v1" d="M70,80 C70,95 65,100 65,115" class="vpc-line" stroke="rgba(0,150,255,0.2)" stroke-width="1.5"/>
+      <circle r="4" fill="#00D4FF" filter="url(#glow)"><animateMotion dur="2.5s" repeatCount="indefinite"><mpath href="#v1"/></animateMotion></circle>
+      <path id="v1b" d="M170,80 C150,95 80,100 75,115" class="vpc-line" stroke="rgba(0,150,255,0.15)" stroke-width="1"/>
+      <circle r="3" fill="#4DA8FF" filter="url(#glow)"><animateMotion dur="3s" repeatCount="indefinite"><mpath href="#v1b"/></animateMotion></circle>
+      <path id="v1c" d="M270,80 C220,95 100,100 85,115" class="vpc-line" stroke="rgba(0,150,255,0.15)" stroke-width="1"/>
+      <circle r="3" fill="#4DA8FF" filter="url(#glow)"><animateMotion dur="3.5s" repeatCount="indefinite"><mpath href="#v1c"/></animateMotion></circle>
+      <!-- Axway → SFTP -->
+      <path id="v2" d="M850,75 C700,90 120,100 75,118" class="vpc-line" stroke="rgba(168,85,247,0.15)" stroke-width="1" stroke-dasharray="5,5"/>
+      <circle r="3.5" fill="#A855F7" filter="url(#glow)"><animateMotion dur="5s" repeatCount="indefinite"><mpath href="#v2"/></animateMotion></circle>
+      <!-- SFTP → Lambda -->
+      <path id="v3" d="M115,148 L225,148" class="vpc-line" stroke="rgba(0,212,255,0.25)" stroke-width="2"/>
+      <circle r="4" fill="#00D4FF" filter="url(#glow)"><animateMotion dur="1.8s" repeatCount="indefinite"><mpath href="#v3"/></animateMotion></circle>
+      <!-- Lambda → Step Fn -->
+      <path id="v4" d="M275,148 L405,148" class="vpc-line" stroke="rgba(255,140,66,0.3)" stroke-width="2"/>
+      <circle r="4.5" fill="#FF8C42" filter="url(#glow)"><animateMotion dur="1.5s" repeatCount="indefinite"><mpath href="#v4"/></animateMotion></circle>
+      <!-- Step Fn → S3 Landing -->
+      <path id="v5" d="M455,148 L575,148" class="vpc-line" stroke="rgba(168,85,247,0.25)" stroke-width="2"/>
+      <circle r="4" fill="#C084FC" filter="url(#glow)"><animateMotion dur="1.8s" repeatCount="indefinite"><mpath href="#v5"/></animateMotion></circle>
       <!-- S3 Landing → S3 Raw -->
-      <path id="p6" d="M750,145 C750,165 60,170 60,200" class="net-path" stroke="rgba(0,212,255,0.2)"/>
-      <circle class="net-dot" fill="#00D4FF"><animateMotion dur="4s" repeatCount="indefinite"><mpath href="#p6"/></animateMotion></circle>
-      <!-- S3 Raw → Glue raw-job -->
-      <path id="p7" d="M80,225 L240,225" class="net-path" stroke="rgba(168,224,0,0.3)"/>
-      <circle class="net-dot" fill="#A8E000"><animateMotion dur="2.5s" repeatCount="indefinite"><mpath href="#p7"/></animateMotion></circle>
-      <!-- Glue raw → Glue model -->
-      <path id="p8" d="M280,225 L420,225" class="net-path" stroke="rgba(168,224,0,0.3)"/>
-      <circle class="net-dot" fill="#A8E000"><animateMotion dur="2s" repeatCount="indefinite"><mpath href="#p8"/></animateMotion></circle>
-      <!-- Glue model → Glue rodb -->
-      <path id="p9" d="M460,225 L620,225" class="net-path" stroke="rgba(168,224,0,0.3)"/>
-      <circle class="net-dot" fill="#A8E000"><animateMotion dur="2s" repeatCount="indefinite"><mpath href="#p9"/></animateMotion></circle>
-      <!-- Glue rodb → Glue enriched -->
-      <path id="p10" d="M660,225 L800,225" class="net-path" stroke="rgba(168,224,0,0.3)"/>
-      <circle class="net-dot" fill="#A8E000"><animateMotion dur="2s" repeatCount="indefinite"><mpath href="#p10"/></animateMotion></circle>
-      <!-- Glue model → Model N PhyN -->
-      <path id="p11" d="M420,245 C420,270 150,280 150,300" class="net-path" stroke="rgba(168,224,0,0.4)"/>
-      <circle class="net-dot" fill="#A8E000" r="4"><animateMotion dur="3s" repeatCount="indefinite"><mpath href="#p11"/></animateMotion></circle>
-      <!-- Glue rodb → Oracle RODB -->
-      <path id="p12" d="M620,245 C600,270 440,280 440,305" class="net-path" stroke="rgba(168,85,247,0.3)"/>
-      <circle class="net-dot" fill="#A855F7"><animateMotion dur="3s" repeatCount="indefinite"><mpath href="#p12"/></animateMotion></circle>
-      <!-- Glue model → Snowflake -->
-      <path id="p13" d="M450,245 C500,270 630,280 640,305" class="net-path" stroke="rgba(20,184,166,0.3)"/>
-      <circle class="net-dot" fill="#14B8A6"><animateMotion dur="3.5s" repeatCount="indefinite"><mpath href="#p13"/></animateMotion></circle>
-      <!-- Model N → Galaxy Reports -->
-      <path id="p14" d="M150,340 C130,370 80,380 80,400" class="net-path" stroke="rgba(255,140,66,0.3)"/>
-      <circle class="net-dot" fill="#FF8C42"><animateMotion dur="3s" repeatCount="indefinite"><mpath href="#p14"/></animateMotion></circle>
+      <path id="v6" d="M575,175 C575,190 70,195 60,210" class="vpc-line" stroke="rgba(0,212,255,0.15)" stroke-width="1.5"/>
+      <circle r="4" fill="#00D4FF" filter="url(#glow)"><animateMotion dur="4s" repeatCount="indefinite"><mpath href="#v6"/></animateMotion></circle>
+      <!-- S3 Raw → raw-job → model-job → rodb-job → enriched (chain) -->
+      <path id="v7" d="M100,243 L210,243" class="vpc-line" stroke="rgba(168,224,0,0.3)" stroke-width="2"/>
+      <circle r="4.5" fill="#A8E000" filter="url(#glow)"><animateMotion dur="2s" repeatCount="indefinite"><mpath href="#v7"/></animateMotion></circle>
+      <path id="v8" d="M255,243 L360,243" class="vpc-line" stroke="rgba(168,224,0,0.3)" stroke-width="2"/>
+      <circle r="4.5" fill="#A8E000" filter="url(#glow)"><animateMotion dur="2s" repeatCount="indefinite" begin="0.5s"><mpath href="#v8"/></animateMotion></circle>
+      <path id="v9" d="M405,243 L510,243" class="vpc-line" stroke="rgba(168,224,0,0.3)" stroke-width="2"/>
+      <circle r="4.5" fill="#A8E000" filter="url(#glow)"><animateMotion dur="2s" repeatCount="indefinite" begin="1s"><mpath href="#v9"/></animateMotion></circle>
+      <path id="v10" d="M555,243 L660,243" class="vpc-line" stroke="rgba(168,224,0,0.3)" stroke-width="2"/>
+      <circle r="4.5" fill="#A8E000" filter="url(#glow)"><animateMotion dur="2s" repeatCount="indefinite" begin="1.5s"><mpath href="#v10"/></animateMotion></circle>
+      <!-- model-job → Model N -->
+      <path id="v11" d="M365,270 C300,290 100,300 90,310" class="vpc-line" stroke="rgba(168,224,0,0.35)" stroke-width="2"/>
+      <circle r="5" fill="#BEF264" filter="url(#glow)"><animateMotion dur="3s" repeatCount="indefinite"><mpath href="#v11"/></animateMotion></circle>
+      <!-- rodb-job → Oracle -->
+      <path id="v12" d="M510,270 C470,290 300,300 285,310" class="vpc-line" stroke="rgba(168,85,247,0.25)" stroke-width="1.5"/>
+      <circle r="4" fill="#C084FC" filter="url(#glow)"><animateMotion dur="3s" repeatCount="indefinite"><mpath href="#v12"/></animateMotion></circle>
+      <!-- model-job → Snowflake -->
+      <path id="v13" d="M390,270 C420,290 450,300 460,310" class="vpc-line" stroke="rgba(20,184,166,0.3)" stroke-width="1.5"/>
+      <circle r="4" fill="#5EEAD4" filter="url(#glow)"><animateMotion dur="3s" repeatCount="indefinite"><mpath href="#v13"/></animateMotion></circle>
+      <!-- enriched → S3 Enriched -->
+      <path id="v14" d="M670,270 L620,310" class="vpc-line" stroke="rgba(0,212,255,0.2)" stroke-width="1.5"/>
+      <circle r="3.5" fill="#67E8F9" filter="url(#glow)"><animateMotion dur="2.5s" repeatCount="indefinite"><mpath href="#v14"/></animateMotion></circle>
+      <!-- Model N → Galaxy -->
+      <path id="v15" d="M90,370 C75,385 60,395 55,405" class="vpc-line" stroke="rgba(255,140,66,0.3)" stroke-width="1.5"/>
+      <circle r="4" fill="#FFB07A" filter="url(#glow)"><animateMotion dur="2.5s" repeatCount="indefinite"><mpath href="#v15"/></animateMotion></circle>
       <!-- Snowflake → DBX-FI -->
-      <path id="p15" d="M640,340 C500,370 290,380 290,400" class="net-path" stroke="rgba(255,140,66,0.3)"/>
-      <circle class="net-dot" fill="#FF8C42"><animateMotion dur="4s" repeatCount="indefinite"><mpath href="#p15"/></animateMotion></circle>
-      <!-- Model N → Outbound s3-to-sftp -->
-      <path id="p16" d="M200,340 C300,370 470,380 480,400" class="net-path" stroke="rgba(244,63,94,0.3)"/>
-      <circle class="net-dot" fill="#F43F5E"><animateMotion dur="4s" repeatCount="indefinite"><mpath href="#p16"/></animateMotion></circle>
-      <!-- Axway → SFTP (external partner) -->
-      <path id="p17" d="M850,45 C860,60 140,80 120,100" class="net-path" stroke="rgba(168,85,247,0.2)"/>
-      <circle class="net-dot" fill="#A855F7"><animateMotion dur="5s" repeatCount="indefinite"><mpath href="#p17"/></animateMotion></circle>
-      <!-- CloudWatch → Step Function (triggers) -->
-      <path id="p18" d="M920,175 C800,175 600,145 570,135" class="net-path" stroke="rgba(245,158,11,0.2)" stroke-dasharray="4,4"/>
-      <circle class="net-dot" fill="#F59E0B" r="2"><animateMotion dur="3s" repeatCount="indefinite"><mpath href="#p18"/></animateMotion></circle>
+      <path id="v16" d="M460,370 C380,390 230,400 210,405" class="vpc-line" stroke="rgba(255,140,66,0.2)" stroke-width="1.5"/>
+      <circle r="3.5" fill="#FFB07A" filter="url(#glow)"><animateMotion dur="4s" repeatCount="indefinite"><mpath href="#v16"/></animateMotion></circle>
+      <!-- Model N → Outbound -->
+      <path id="v17" d="M140,370 C250,390 360,400 370,405" class="vpc-line" stroke="rgba(244,63,94,0.25)" stroke-width="1.5"/>
+      <circle r="4" fill="#FDA4AF" filter="url(#glow)"><animateMotion dur="3.5s" repeatCount="indefinite"><mpath href="#v17"/></animateMotion></circle>
+      <!-- CW Cron → Step Fn (dashed) -->
+      <path id="v18" d="M880,170 C700,165 480,155 455,150" class="vpc-line" stroke="rgba(245,158,11,0.15)" stroke-width="1" stroke-dasharray="4,4"/>
+      <circle r="2.5" fill="#FCD34D" filter="url(#glow)"><animateMotion dur="3.5s" repeatCount="indefinite"><mpath href="#v18"/></animateMotion></circle>
     </svg>
 
-    <!-- Platform services footer -->
-    <div class="net-platform">
-      <span>Terraform IaC</span><span>GitHub Actions CI/CD</span><span>CloudTrail Audit</span><span>KMS Encryption</span><span>IAM Federation</span><span>CloudWatch Alarms</span><span>ServiceNow ITSM</span><span>DynamoDB State</span><span>Secrets Manager</span>
+    <!-- Footer -->
+    <div class="vpc-footer">
+      <span>Terraform IaC</span><span>GitHub CI/CD</span><span>CloudTrail</span><span>KMS</span><span>IAM</span><span>CloudWatch</span><span>ServiceNow</span><span>DynamoDB</span><span>Secrets Mgr</span>
     </div>
   </div>
 </section>
@@ -1939,7 +1886,83 @@ section.present .anim-fade  { animation:fadeIn       0.5s  ease forwards; }
   </div>
 </section>
 
-<!-- Slide 20 removed — merged into slide 12 (End-to-End Summary + Thank You) -->
+<!-- ================================================================
+     CLOSING SLIDE: Summary + Thank You (merged from old slides 12 + 20)
+     ================================================================ -->
+<section data-transition="fade">
+  <span class="slide-tag will-animate anim-fade d0" style="text-align:center;">End-to-End Summary &amp; Thank You</span>
+  <div class="slide-title will-animate" style="text-align:center;font-size:1.5rem;">The Complete Data Journey</div>
+  <p class="slide-subtitle will-animate" style="text-align:center;font-size:0.82rem;">
+    From SAP source systems through AWS to Model N and business reporting &mdash; every byte follows a governed, auditable, automated path.
+  </p>
+
+  <!-- Pipeline visualization -->
+  <div class="finale-pipeline will-animate anim-fade d3" style="margin-bottom:14px;">
+    <div class="finale-node" style="border-color:rgba(0,212,255,0.3);">SAP<br><span style="font-size:0.65rem;color:var(--t3);">P2R, P4S, MDM</span></div>
+    <div class="finale-arrow"></div>
+    <div class="finale-node" style="border-color:rgba(0,212,255,0.3);">S3 Landing</div>
+    <div class="finale-arrow"></div>
+    <div class="finale-node" style="border-color:rgba(0,212,255,0.3);">S3 Raw</div>
+    <div class="finale-arrow"></div>
+    <div class="finale-node" style="border-color:rgba(168,224,0,0.3);">Glue ETL</div>
+    <div class="finale-arrow"></div>
+    <div class="finale-node" style="border-color:rgba(168,224,0,0.5);background:rgba(168,224,0,0.06);">Model N</div>
+    <div class="finale-arrow"></div>
+    <div class="finale-node" style="border-color:rgba(255,140,66,0.3);">Reports</div>
+  </div>
+
+  <!-- 3 cards -->
+  <div class="grid-3" style="margin-bottom:12px;">
+    <div class="card will-animate anim-up d5 fragment fade-up" style="text-align:center;">
+      <div class="card-icon">&#128202;</div>
+      <div class="card-title">Daily Data Volumes</div>
+      <div class="card-body" style="font-size:0.78rem;">Hundreds of thousands of transactions, inventory positions, and master data changes flowing daily.</div>
+    </div>
+    <div class="card will-animate anim-up d7 fragment fade-up" style="text-align:center;">
+      <div class="card-icon">&#128274;</div>
+      <div class="card-title">Fully Governed</div>
+      <div class="card-body" style="font-size:0.78rem;">CloudTrail audit, Terraform IaC, GitHub PR reviews, ServiceNow incident tracking.</div>
+    </div>
+    <div class="card will-animate anim-up d9 fragment fade-up" style="text-align:center;">
+      <div class="card-icon">&#9989;</div>
+      <div class="card-title">Production Ready</div>
+      <div class="card-body" style="font-size:0.78rem;">4-env promotion, SOX audit trails, encrypted at rest + in transit, 24/7 monitoring.</div>
+    </div>
+  </div>
+
+  <!-- Key stats -->
+  <div style="display:flex;gap:20px;flex-wrap:wrap;justify-content:center;margin-bottom:12px;" class="will-animate anim-fade d11 fragment fade-up">
+    <div style="text-align:center;"><div style="font-size:1.8rem;font-weight:800;color:var(--bl);">8</div><div style="font-size:0.68rem;color:var(--t3);">Lambda Functions</div></div>
+    <div style="width:1px;background:rgba(0,212,255,0.15);"></div>
+    <div style="text-align:center;"><div style="font-size:1.8rem;font-weight:800;color:var(--bg-c);">6</div><div style="font-size:0.68rem;color:var(--t3);">Glue ETL Jobs</div></div>
+    <div style="width:1px;background:rgba(0,212,255,0.15);"></div>
+    <div style="text-align:center;"><div style="font-size:1.8rem;font-weight:800;color:var(--purple);">23</div><div style="font-size:0.68rem;color:var(--t3);">Scheduled Triggers</div></div>
+    <div style="width:1px;background:rgba(0,212,255,0.15);"></div>
+    <div style="text-align:center;"><div style="font-size:1.8rem;font-weight:800;color:var(--orange);">4</div><div style="font-size:0.68rem;color:var(--t3);">AWS Environments</div></div>
+    <div style="width:1px;background:rgba(0,212,255,0.15);"></div>
+    <div style="text-align:center;"><div style="font-size:1.8rem;font-weight:800;color:var(--teal);">5+</div><div style="font-size:0.68rem;color:var(--t3);">Partners</div></div>
+  </div>
+
+  <!-- Thank you bar -->
+  <div class="will-animate anim-fade d13" style="text-align:center;padding:14px 20px;border-radius:10px;background:linear-gradient(135deg,rgba(0,114,229,0.1),rgba(168,224,0,0.08));border:1px solid rgba(0,212,255,0.2);">
+    <p style="font-size:1.1rem;font-weight:700;color:var(--t1);margin-bottom:4px;">
+      Thank You &mdash; Bayer AG Pharma Revenue Management
+    </p>
+    <p style="font-size:0.78rem;color:var(--t3);margin-bottom:8px;">
+      Government Pricing &bull; Commercial Contracting &bull; Medicaid Rebates &bull; Chargeback Management &bull; 340B Compliance
+    </p>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:center;">
+      <span class="tech-pill" style="font-size:0.65rem;">AWS</span>
+      <span class="tech-pill" style="font-size:0.65rem;">Terraform</span>
+      <span class="tech-pill" style="font-size:0.65rem;border-color:rgba(168,224,0,0.3);color:var(--bg-c);">Snowflake</span>
+      <span class="tech-pill" style="font-size:0.65rem;">Model N PhyN</span>
+      <span class="tech-pill" style="font-size:0.65rem;border-color:rgba(168,85,247,0.3);color:var(--purple);">Oracle RODB</span>
+      <span class="tech-pill" style="font-size:0.65rem;">SAP</span>
+      <span class="tech-pill" style="font-size:0.65rem;border-color:rgba(255,140,66,0.3);color:var(--orange);">Axway MFT</span>
+      <span class="tech-pill" style="font-size:0.65rem;">GitHub Actions</span>
+    </div>
+  </div>
+</section>
 
 </div><!-- /slides -->
 </div><!-- /reveal -->
