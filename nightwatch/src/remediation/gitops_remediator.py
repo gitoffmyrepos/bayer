@@ -57,6 +57,7 @@ class GitOpsRemediator:
         "startup_probe_failure",
         "resource_quota_exceeded",
         "pending_pod_scheduling",
+        "cilium_empty_bpf_map",  # Direct BPF fix via SSH — no gitops needed
     }
 
     def __init__(self, repos_config: dict, llm_client, alert_manager=None):

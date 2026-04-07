@@ -342,6 +342,7 @@ class NightwatchEngine:
                         "startup_probe_failure": "probe_failure",
                         "resource_quota_exceeded": "resource_exhaustion",
                         "pending_pod_scheduling": "resource_exhaustion",
+                        "cilium_empty_bpf_map": "cilium_empty_bpf_map",
                     }
                     playbook_name = playbook_map.get(issue_type, "crash_loop")
 
@@ -389,6 +390,8 @@ class NightwatchEngine:
             return "crash_loop_backoff"
         if "imagepullbackoff" in msg or "image" in msg and "pull" in msg:
             return "image_pull_error"
+        if "cilium" in msg and ("bpf" in msg or "policy" in msg or "ipcache" in msg):
+            return "cilium_empty_bpf_map"
         if "liveness" in msg and ("fail" in msg or "timeout" in msg):
             return "liveness_probe_failure"
         if "readiness" in msg and ("fail" in msg or "timeout" in msg):

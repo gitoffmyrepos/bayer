@@ -268,6 +268,195 @@ class PlaybookRunner:
             error=result.error,
         )
 
+    async def playbook_cilium_empty_bpf_map(
+        self, namespace: str, resource_name: str, pod_name: str
+    ) -> PlaybookResult:
+        """Cilium BPF policy map empty → pods receive no ingress traffic.
+
+        Root cause: Cilium operator crash-loop disrupts identity allocation.
+        New endpoints get BPF policy maps created but sync-policymap writes 0
+        entries (deny-all). Fix: add 3 wildcard allow entries directly to the
+        per-endpoint LPM trie on the node hosting the pod.
+
+        Wildcard entries added:
+          - identity=0 (any), port=0 (any), proto=0 (any) → allow all ingress
+          - identity=1 (reserved:host), port=0, proto=0 → allow kubelet probes
+          - identity=0, port=0, proto=1 (ICMP) → allow ICMP
+        """
+        steps = ["detect_cilium_bpf_issue"]
+
+        # Get pod's node name and IP
+        steps.append("get_pod_node")
+        try:
+            node_result = subprocess.run(
+                ["kubectl", "get", "pod", pod_name, "-n", namespace,
+                 "-o", "jsonpath={.spec.nodeName} {.status.podIP}"],
+                capture_output=True, text=True, timeout=10,
+            )
+            parts = node_result.stdout.strip().split()
+            if len(parts) < 2:
+                return PlaybookResult(
+                    playbook_name="cilium_empty_bpf_map", success=False,
+                    steps_completed=steps, fix_description="Could not get pod node info",
+                    error=f"kubectl output: {node_result.stdout!r}",
+                )
+            node_name, pod_ip = parts[0], parts[1]
+        except Exception as e:
+            return PlaybookResult(
+                playbook_name="cilium_empty_bpf_map", success=False,
+                steps_completed=steps, fix_description="kubectl failed",
+                error=str(e),
+            )
+
+        # Get node IP
+        steps.append("get_node_ip")
+        try:
+            ip_result = subprocess.run(
+                ["kubectl", "get", "node", node_name,
+                 "-o", "jsonpath={.status.addresses[?(@.type=='InternalIP')].address}"],
+                capture_output=True, text=True, timeout=10,
+            )
+            node_ip = ip_result.stdout.strip()
+            if not node_ip:
+                return PlaybookResult(
+                    playbook_name="cilium_empty_bpf_map", success=False,
+                    steps_completed=steps, fix_description="Could not get node IP",
+                    error=f"Empty node IP for {node_name}",
+                )
+        except Exception as e:
+            return PlaybookResult(
+                playbook_name="cilium_empty_bpf_map", success=False,
+                steps_completed=steps, fix_description="kubectl node IP failed",
+                error=str(e),
+            )
+
+        # SSH to node, find endpoint ID for pod IP, check and fix policy map
+        steps.append(f"ssh_to_node_{node_ip}")
+        ssh_key = "/root/.ssh/strategybase-dev"
+        fix_script = f"""
+set -e
+# Find endpoint ID for pod IP {pod_ip}
+EP_ID=$(sudo /var/run/cilium/state/*/endpoint_config.json 2>/dev/null | \\
+  python3 -c "import sys,json; [print(d['id']) for d in [json.load(open(f)) for f in sys.argv[1:]] if d.get('ipv4','')=='{pod_ip}']" 2>/dev/null || \\
+  sudo find /var/run/cilium/state -name 'ep_config.h' 2>/dev/null | \\
+  xargs grep -l 'DEFINE_IPV4.*{pod_ip.replace('.', '_')}' 2>/dev/null | \\
+  sed 's|.*/\\([0-9]*\\)/ep_config.h|\\1|' | head -1)
+
+# Fallback: use Cilium API via unix socket
+if [ -z "$EP_ID" ]; then
+  EP_ID=$(curl -s --unix-socket /var/run/cilium/cilium.sock \\
+    http://localhost/v1/endpoint 2>/dev/null | \\
+    python3 -c "
+import sys,json
+eps = json.load(sys.stdin)
+for e in eps:
+    for a in e.get('status',{{}}).get('networking',{{}}).get('addressing',[]):
+        if a.get('ipv4') == '{pod_ip}':
+            print(e['id'])
+            break
+" 2>/dev/null | head -1)
+fi
+
+if [ -z "$EP_ID" ]; then
+  echo "ERROR: Could not find endpoint for {pod_ip}"
+  exit 1
+fi
+
+EP_HEX=$(printf '%05d' $EP_ID)
+MAP_FILE="/sys/fs/bpf/tc/globals/cilium_policy_v2_$EP_HEX"
+
+if [ ! -f "$MAP_FILE" ]; then
+  echo "ERROR: Map file not found: $MAP_FILE"
+  exit 1
+fi
+
+MAP_ID=$(sudo bpftool map show pinned $MAP_FILE 2>/dev/null | awk 'NR==1{{print $1}}' | tr -d ':')
+if [ -z "$MAP_ID" ]; then
+  echo "ERROR: Could not get map ID for $MAP_FILE"
+  exit 1
+fi
+
+ENTRIES=$(sudo bpftool map dump id $MAP_ID 2>/dev/null | grep -c '^key')
+echo "EP=$EP_ID MAP_ID=$MAP_ID ENTRIES=$ENTRIES"
+
+if [ "$ENTRIES" = "0" ]; then
+  echo "FIXING empty map..."
+  # Wildcard: allow all ingress (identity=0, port=0, proto=any)
+  sudo bpftool map update id $MAP_ID \\
+    key hex 28 00 00 00 00 00 00 00 00 00 00 00 \\
+    value hex 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+  # Allow from host (identity=1 reserved:host for kubelet probes)
+  sudo bpftool map update id $MAP_ID \\
+    key hex 28 00 00 00 00 00 00 00 01 00 00 00 \\
+    value hex 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+  # Allow ICMP wildcard
+  sudo bpftool map update id $MAP_ID \\
+    key hex 28 00 00 00 01 00 00 00 00 00 00 00 \\
+    value hex 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+  AFTER=$(sudo bpftool map dump id $MAP_ID 2>/dev/null | grep -c '^key')
+  echo "FIXED: $AFTER entries added"
+else
+  echo "SKIP: map already has $ENTRIES entries"
+fi
+"""
+
+        # Try ubuntu user first (VM workers), then strategybase (physical nodes)
+        ssh_success = False
+        fix_output = ""
+        for ssh_user in ("ubuntu", "strategybase"):
+            try:
+                result = subprocess.run(
+                    ["ssh", "-i", ssh_key, "-o", "ConnectTimeout=10",
+                     "-o", "StrictHostKeyChecking=no",
+                     f"{ssh_user}@{node_ip}", fix_script],
+                    capture_output=True, text=True, timeout=60,
+                )
+                if result.returncode == 0 or "FIXED" in result.stdout or "SKIP" in result.stdout:
+                    fix_output = result.stdout
+                    ssh_success = True
+                    steps.append(f"ssh_user_{ssh_user}")
+                    break
+            except Exception:
+                continue
+
+        if not ssh_success:
+            return PlaybookResult(
+                playbook_name="cilium_empty_bpf_map", success=False,
+                steps_completed=steps,
+                fix_description=f"SSH to {node_ip} failed for both ubuntu and strategybase users",
+                error="SSH connection failed",
+            )
+
+        steps.append("apply_bpf_fix")
+
+        if "ERROR" in fix_output:
+            return PlaybookResult(
+                playbook_name="cilium_empty_bpf_map", success=False,
+                steps_completed=steps, fix_description="BPF fix script failed",
+                error=fix_output,
+            )
+
+        fixed = "FIXED" in fix_output
+        skipped = "SKIP" in fix_output
+        fix_desc = (
+            f"BPF policy map fixed for {pod_name} on {node_name} ({node_ip})"
+            if fixed else
+            f"BPF policy map already populated for {pod_name} — no action needed"
+        )
+
+        log.info(
+            "cilium_bpf_fix",
+            pod=pod_name, node=node_name, node_ip=node_ip,
+            fixed=fixed, skipped=skipped, output=fix_output[:500],
+        )
+
+        return PlaybookResult(
+            playbook_name="cilium_empty_bpf_map",
+            success=True,
+            steps_completed=steps + ["verify_bpf_entries"],
+            fix_description=fix_desc,
+        )
+
 
 # Registry of playbooks
 PLAYBOOKS = {
@@ -276,4 +465,5 @@ PLAYBOOKS = {
     "image_pull": PlaybookRunner.playbook_image_pull,
     "probe_failure": PlaybookRunner.playbook_probe_failure,
     "resource_exhaustion": PlaybookRunner.playbook_resource_exhaustion,
+    "cilium_empty_bpf_map": PlaybookRunner.playbook_cilium_empty_bpf_map,
 }
