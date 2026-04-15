@@ -30,7 +30,12 @@ alerting:
   dedup_window_seconds: 300
   discord:
     webhook_url: ${DISCORD_WEBHOOK_URL}
-    enabled: false  # Disabled — migrated to Telegram
+    enabled: true  # Active
+    # Nova bot user ID — Nightwatch will @-mention her on critical/high
+    # alerts so OpenClaw fires a real mention event (not just embed).
+    mention_user_id: "1469399996540653714"   # nova-msg bot user
+    # The Bot API mention is sent ALSO via DISCORD_BOT_TOKEN+DISCORD_CHANNEL_ID
+    # env vars (set in k8s deployment from nightwatch-discord secret).
   telegram:
     webhook_url: http://localhost:8765/alert
 
