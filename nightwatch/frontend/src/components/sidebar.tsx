@@ -36,7 +36,7 @@ function HealthDot({ status }: { status?: string }) {
       ? 'bg-yellow-400'
       : status === 'unhealthy'
       ? 'bg-red-400'
-      : 'bg-slate-500';
+      : 'bg-zinc-600';
   return (
     <span
       className={cn(
@@ -68,8 +68,8 @@ function NavLink({
       className={cn(
         'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all',
         isActive
-          ? 'bg-slate-800 text-slate-100 shadow-sm'
-          : 'text-slate-400 hover:text-slate-100 hover:bg-slate-800/60'
+          ? 'bg-red-600/15 text-white border-l-2 border-red-500'
+          : 'text-zinc-400 hover:text-white hover:bg-zinc-900/60'
       )}
     >
       <Icon className="w-4 h-4 flex-shrink-0" />
@@ -82,19 +82,19 @@ function SidebarContent({ onClose }: { onClose?: () => void }) {
   const { data: health } = useHealth();
 
   return (
-    <div className="flex flex-col h-full bg-slate-900 border-r border-slate-800">
+    <div className="flex flex-col h-full bg-black border-r border-zinc-900">
       {/* Header */}
-      <div className="px-4 py-5 border-b border-slate-800">
+      <div className="px-4 py-5 border-b border-zinc-900">
         <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-lg bg-indigo-500/20 border border-indigo-500/30 flex items-center justify-center">
-            <Eye className="w-4 h-4 text-indigo-400" />
+          <div className="w-8 h-8 rounded-lg bg-red-600/20 border border-red-600/30 flex items-center justify-center">
+            <Eye className="w-4 h-4 text-red-500" />
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <span className="font-bold text-slate-100 tracking-tight">⚡ Nightwatch</span>
+              <span className="font-bold text-white tracking-tight">⚡ Nightwatch</span>
               <HealthDot status={health?.status === 'ok' ? 'healthy' : health?.status} />
             </div>
-            <p className="text-xs text-slate-500">v{health?.version ?? '2.0.0'}</p>
+            <p className="text-xs text-zinc-600">v{health?.version ?? '2.0.0'}</p>
           </div>
         </div>
       </div>
@@ -107,8 +107,8 @@ function SidebarContent({ onClose }: { onClose?: () => void }) {
       </nav>
 
       {/* Footer */}
-      <div className="px-4 py-3 border-t border-slate-800">
-        <p className="text-xs text-slate-600">
+      <div className="px-4 py-3 border-t border-zinc-900">
+        <p className="text-xs text-zinc-700">
           Cloud-agnostic AI monitoring
         </p>
       </div>
@@ -127,18 +127,18 @@ export function Sidebar() {
       </aside>
 
       {/* Mobile: top bar + sheet */}
-      <div className="lg:hidden fixed top-0 left-0 right-0 z-40 flex items-center justify-between px-4 py-3 bg-slate-900 border-b border-slate-800">
+      <div className="lg:hidden fixed top-0 left-0 right-0 z-40 flex items-center justify-between px-4 py-3 bg-black border-b border-zinc-900">
         <div className="flex items-center gap-2">
-          <Eye className="w-5 h-5 text-indigo-400" />
-          <span className="font-bold text-slate-100">⚡ Nightwatch</span>
+          <Eye className="w-5 h-5 text-red-500" />
+          <span className="font-bold text-white">⚡ Nightwatch</span>
         </div>
         <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
           <SheetTrigger>
-            <Button variant="ghost" size="icon" className="text-slate-400">
+            <Button variant="ghost" size="icon" className="text-zinc-400">
               {mobileOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
             </Button>
           </SheetTrigger>
-          <SheetContent side="left" className="p-0 w-56 bg-slate-900 border-slate-800">
+          <SheetContent side="left" className="p-0 w-56 bg-black border-zinc-900">
             <SidebarContent onClose={() => setMobileOpen(false)} />
           </SheetContent>
         </Sheet>

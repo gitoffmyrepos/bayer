@@ -15,7 +15,7 @@ function statusBg(status: string) {
     case 'healthy': return 'bg-green-500/10 text-green-400 border-green-500/20';
     case 'degraded': return 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20';
     case 'unhealthy': return 'bg-red-500/10 text-red-400 border-red-500/20';
-    default: return 'bg-slate-500/10 text-slate-400 border-slate-500/20';
+    default: return 'bg-zinc-500/10 text-zinc-400 border-zinc-500/20';
   }
 }
 
@@ -78,21 +78,21 @@ export default function LiveCheckPage() {
   return (
     <div className="p-6 lg:pt-6 pt-16 space-y-6">
       <div>
-        <h1 className="text-xl font-bold text-slate-100">Live Check</h1>
-        <p className="text-sm text-slate-500">Trigger an immediate monitoring check on any adapter</p>
+        <h1 className="text-xl font-bold text-white">Live Check</h1>
+        <p className="text-sm text-zinc-500">Trigger an immediate monitoring check on any adapter</p>
       </div>
 
       {/* Controls */}
-      <Card className="bg-slate-900 border-slate-800">
+      <Card className="bg-zinc-950 border-zinc-800">
         <CardContent className="p-6">
           <div className="flex flex-wrap items-center gap-4">
             <div>
-              <p className="text-xs text-slate-500 mb-2 uppercase tracking-wider">Target Adapter</p>
+              <p className="text-xs text-zinc-500 mb-2 uppercase tracking-wider">Target Adapter</p>
               <Select value={selectedAdapter} onValueChange={(v) => setSelectedAdapter(v ?? 'all')}>
-                <SelectTrigger className="w-[200px] bg-slate-800 border-slate-700 text-slate-200">
+                <SelectTrigger className="w-[200px] bg-zinc-900 border-zinc-700 text-zinc-200">
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent className="bg-slate-900 border-slate-700">
+                <SelectContent className="bg-zinc-950 border-zinc-700">
                   <SelectItem value="all">All Adapters</SelectItem>
                   {adapterNames.map((name) => (
                     <SelectItem key={name} value={name}>{name}</SelectItem>
@@ -107,7 +107,7 @@ export default function LiveCheckPage() {
               onClick={runCheck}
               disabled={isPending}
               size="lg"
-              className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold px-8 gap-2"
+            className="bg-red-600 hover:bg-red-700 text-white font-semibold px-8 gap-2"
             >
               {isPending ? (
                 <>
@@ -125,11 +125,11 @@ export default function LiveCheckPage() {
 
           {isPending && (
             <div className="mt-4 space-y-2">
-              <div className="flex items-center justify-between text-xs text-slate-500">
+              <div className="flex items-center justify-between text-xs text-zinc-500">
                 <span>Checking components…</span>
                 <span>{Math.round(progress)}%</span>
               </div>
-              <Progress value={progress} className="h-2 bg-slate-800" />
+              <Progress value={progress} className="h-2 bg-zinc-800" />
             </div>
           )}
         </CardContent>
@@ -138,7 +138,7 @@ export default function LiveCheckPage() {
       {/* Result */}
       {result && (
         <div className="space-y-4">
-          <Card className="bg-slate-900 border-slate-800 border-green-500/20">
+          <Card className="bg-zinc-950 border-zinc-800 border-green-500/20">
             <CardHeader className="pb-3">
               <CardTitle className="text-sm flex items-center gap-2 text-green-400">
                 <CheckCircle2 className="w-4 h-4" />
@@ -148,17 +148,17 @@ export default function LiveCheckPage() {
             <CardContent className="pt-0">
               <div className="grid grid-cols-2 gap-4 text-sm">
                 <div>
-                  <p className="text-slate-500 text-xs mb-1">Target</p>
-                  <p className="text-slate-200 font-medium">{result.adapter}</p>
+                  <p className="text-zinc-500 text-xs mb-1">Target</p>
+                  <p className="text-zinc-200 font-medium">{result.adapter}</p>
                 </div>
                 <div>
-                  <p className="text-slate-500 text-xs mb-1">Triggered</p>
-                  <p className="text-slate-200">{result.triggered ? 'Yes' : 'No'}</p>
+                  <p className="text-zinc-500 text-xs mb-1">Triggered</p>
+                  <p className="text-zinc-200">{result.triggered ? 'Yes' : 'No'}</p>
                 </div>
               </div>
               <div className="mt-3">
-                <p className="text-slate-500 text-xs mb-1">Message</p>
-                <p className="text-slate-300 text-sm bg-slate-800 rounded-lg p-3">{result.message}</p>
+                <p className="text-zinc-500 text-xs mb-1">Message</p>
+                <p className="text-zinc-300 text-sm bg-zinc-900 rounded-lg p-3">{result.message}</p>
               </div>
             </CardContent>
           </Card>
@@ -166,31 +166,33 @@ export default function LiveCheckPage() {
           {/* Component results from adapter data */}
           {adapters?.adapters && (
             <div>
-              <p className="text-xs font-medium text-slate-500 uppercase tracking-wider mb-3">Component Results</p>
+              <p className="text-xs font-medium text-zinc-500 uppercase tracking-wider mb-3">Component Results</p>
               <div className="space-y-2">
                 {adapters.adapters
                   .filter((a: { name: string }) => result.adapter === 'all' || a.name === result.adapter)
-                  .flatMap((a: { name: string; components: Array<{ name: string; type: string; status: string; last_seen?: string }> }) =>
-                    a.components.map((c: { name: string; type: string; status: string; last_seen?: string }) => ({ ...c, adapter: a.name }))
+                  .flatMap((a: { name: string; components: Array<{ name: string; type: string; status?: string; last_seen?: string; metadata?: { status?: string } }> }) =>
+                    a.components.map((c) => ({ ...c, adapter: a.name }))
                   )
-                  .map((comp: { name: string; type: string; status: string; last_seen?: string; adapter: string }, i: number) => (
-                    <Card key={i} className="bg-slate-900 border-slate-800">
+                  .map((comp: { name: string; type: string; status?: string; last_seen?: string; metadata?: { status?: string }; adapter: string }, i: number) => {
+                    const cs = comp.status ?? comp.metadata?.status ?? 'unknown';
+                    return (
+                    <Card key={i} className="bg-zinc-950 border-zinc-800">
                       <CardContent className="p-3">
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-2.5">
-                            <StatusIcon status={comp.status} />
+                            <StatusIcon status={cs} />
                             <div>
-                              <p className="text-sm text-slate-200 font-medium">{comp.name}</p>
-                              <p className="text-xs text-slate-500">{comp.adapter} · {comp.type}</p>
+                              <p className="text-sm text-zinc-200 font-medium">{comp.name}</p>
+                              <p className="text-xs text-zinc-500">{comp.adapter} · {comp.type}</p>
                             </div>
                           </div>
-                          <Badge variant="outline" className={cn('text-xs', statusBg(comp.status))}>
-                            {comp.status.toUpperCase()}
+                          <Badge variant="outline" className={cn('text-xs', statusBg(cs))}>
+                            {cs.toUpperCase()}
                           </Badge>
                         </div>
                       </CardContent>
                     </Card>
-                  ))}
+                  ); })}
               </div>
             </div>
           )}
@@ -200,22 +202,22 @@ export default function LiveCheckPage() {
       {/* Check History */}
       {checkHistory.length > 0 && (
         <div>
-          <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-3">
+          <h2 className="text-sm font-semibold text-zinc-500 uppercase tracking-wider mb-3">
             Check History
           </h2>
-          <Card className="bg-slate-900 border-slate-800">
+          <Card className="bg-zinc-950 border-zinc-800">
             <CardContent className="p-0">
               {checkHistory.map((item, i) => (
                 <div
                   key={i}
-                  className="flex items-center justify-between px-4 py-3 border-b border-slate-800 last:border-0 text-sm"
+                  className="flex items-center justify-between px-4 py-3 border-b border-zinc-800 last:border-0 text-sm"
                 >
                   <div className="flex items-center gap-2.5">
-                    <RefreshCw className="w-3.5 h-3.5 text-slate-500" />
-                    <span className="text-slate-400">{item.result.adapter}</span>
+                    <RefreshCw className="w-3.5 h-3.5 text-zinc-500" />
+                    <span className="text-zinc-400">{item.result.adapter}</span>
                   </div>
                   <div className="flex items-center gap-3">
-                    <span className="text-xs text-slate-600">
+                    <span className="text-xs text-zinc-600">
                       {item.time.toLocaleTimeString()}
                     </span>
                     <Badge variant="outline" className="text-xs bg-green-500/10 text-green-400 border-green-500/20">
@@ -230,7 +232,7 @@ export default function LiveCheckPage() {
       )}
 
       {!result && !isPending && (
-        <div className="text-center py-12 text-slate-600 text-sm">
+        <div className="text-center py-12 text-zinc-600 text-sm">
           <Zap className="w-10 h-10 mx-auto mb-3 opacity-30" />
           Select an adapter and click Run Check to trigger an immediate check
         </div>

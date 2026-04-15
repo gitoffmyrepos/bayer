@@ -123,9 +123,13 @@ class NightwatchEngine:
         llm_client: NightwatchLLMClient,
         config: dict,
         max_incidents: int = 100,
+        remediation_llm_client: Optional[NightwatchLLMClient] = None,
     ):
         self.adapter = adapter
         self.llm = llm_client
+        # Remediation LLM: dedicated client for healing/fixes (e.g. MiniMax-M2.7).
+        # Falls back to the monitoring client when not configured.
+        self.remediation_llm = remediation_llm_client or llm_client
         self.alert_manager = AlertManager(config.get("alerting", {}))
         self.config = config
 
@@ -145,11 +149,15 @@ class NightwatchEngine:
 
         if REMEDIATION_AVAILABLE and healing_config.get("mode") == "auto_remediate":
             try:
-                self._remediator = GitOpsRemediator(repos_config, llm_client, self.alert_manager)
+                # Remediation + code-analysis use the remediation LLM (MiniMax-M2.7 by default),
+                # NOT the monitoring LLM — fixes need a stronger reasoning model.
+                self._remediator = GitOpsRemediator(repos_config, self.remediation_llm, self.alert_manager)
                 self._playbook_runner = PlaybookRunner(self._remediator)
                 fx_path = repos_config.get("fx", {}).get("path", "/repos/fx")
-                self._code_analyzer = ApplicationCodeAnalyzer(fx_path, llm_client, self.alert_manager)
-                log.info("auto_remediation_enabled", mode="auto_remediate")
+                self._code_analyzer = ApplicationCodeAnalyzer(fx_path, self.remediation_llm, self.alert_manager)
+                log.info("auto_remediation_enabled",
+                         mode="auto_remediate",
+                         remediation_model=getattr(self.remediation_llm, "model", "unknown"))
             except Exception as e:
                 log.warning(f"auto_remediation_init_failed: {e}")
 

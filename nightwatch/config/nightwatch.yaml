@@ -67,11 +67,14 @@ healing:
     - gitops_fix_image
     - gitops_fix_resources
     - code_analyze_and_recommend
-  # LLM for remediation (most capable local model)
+  # LLM for remediation — MiniMax-M2.7 (Anthropic-compat endpoint).
+  # Strong reasoning model for actual code fixes & GitOps remediation.
+  # Monitoring still uses the primary `llm` block above (Anthropic Haiku) for cheap triage.
   remediation_llm:
-    provider: ollama
-    model: "kwangsuklee/Qwen3.5-27B-Claude-4.6-Opus-Reasoning-Distilled-GGUF:latest"
-    base_url: ${OLLAMA_URL:http://ollama.prod-forex.svc.cluster.local:11434}
+    provider: anthropic
+    model: "MiniMax-M2.7"
+    api_key: ${MINIMAX_API_KEY}
+    base_url: https://api.minimax.io/anthropic
     timeout_seconds: 120
     max_tokens: 4096
 

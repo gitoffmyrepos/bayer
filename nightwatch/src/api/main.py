@@ -24,9 +24,9 @@ from typing import Optional
 
 import structlog
 import uvicorn
-from fastapi import FastAPI, Request
+from fastapi import BackgroundTasks, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 
 from src.api.routes import router
 from src.core.config import NightwatchConfig
@@ -137,15 +137,31 @@ async def lifespan(app: FastAPI):
                     hint="Using defaults. Set NIGHTWATCH_CONFIG env var or create config/nightwatch.yaml")
         config = NightwatchConfig({"nightwatch": {}, "llm": {}, "adapters": [], "alerting": {}})
 
-    # Initialize LLM client
+    # Initialize LLM client (monitoring / diagnosis)
     try:
         llm_client = NightwatchLLMClient(config.llm)
         app.state.llm_client = llm_client
-        log.info("llm_initialized", provider=config.llm_provider)
+        log.info("llm_initialized", provider=config.llm_provider, model=llm_client.model)
     except Exception as e:
         log.warning("llm_init_failed", error=str(e),
                     hint="Monitoring will run without AI analysis")
         llm_client = None
+
+    # Initialize remediation LLM client (healing / fixes) — optional, falls back to monitoring llm
+    remediation_client = None
+    rem_cfg = config.remediation_llm
+    if rem_cfg and rem_cfg is not config.llm:
+        try:
+            remediation_client = NightwatchLLMClient(rem_cfg)
+            app.state.remediation_client = remediation_client
+            log.info("remediation_llm_initialized",
+                     provider=rem_cfg.get("provider"),
+                     model=remediation_client.model)
+        except Exception as e:
+            log.warning("remediation_llm_init_failed", error=str(e),
+                        hint="Remediation will fall back to monitoring LLM")
+    if remediation_client is None:
+        remediation_client = llm_client
 
     # Load and start adapters
     enabled_adapters = config.get_adapter_configs()
@@ -162,6 +178,7 @@ async def lifespan(app: FastAPI):
                 adapter=adapter,
                 llm_client=llm_client,
                 config=config.raw(),
+                remediation_llm_client=remediation_client,
             )
             app.state.engines[adapter_name] = engine
 
@@ -207,9 +224,18 @@ app = FastAPI(
 )
 
 # CORS
+# FIX: Restrict CORS to known origins instead of wildcard
+_NIGHTWATCH_CORS_ORIGINS = [
+    o.strip()
+    for o in os.environ.get(
+        "CORS_ALLOWED_ORIGINS",
+        "https://forex.strategybase.io,http://localhost:3000",
+    ).split(",")
+    if o.strip()
+]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_NIGHTWATCH_CORS_ORIGINS,
     allow_methods=["GET", "POST"],
     allow_headers=["*"],
 )
@@ -229,13 +255,20 @@ async def inject_request_middleware(request: Request, call_next):
 @app.exception_handler(Exception)
 async def generic_exception_handler(request: Request, exc: Exception):
     log.error("unhandled_exception", path=request.url.path, error=str(exc))
+    # FIX: Do not leak internal error details to the client
     return JSONResponse(
         status_code=500,
-        content={"detail": "Internal server error", "error": str(exc)},
+        content={"detail": "Internal server error"},
     )
 
 
 # ─── Include routes ───────────────────────────────────────────────────────────
+
+@app.get("/", include_in_schema=False)
+async def root():
+    """Redirect root to the interactive API documentation."""
+    return RedirectResponse(url="/docs")
+
 
 # Mount routes with request injection
 @app.get("/health")
@@ -290,11 +323,9 @@ async def get_incidents(
 @app.post("/check")
 async def trigger_check(
     request: Request,
-    background_tasks: BackgroundTasks = None,
     adapter: Optional[str] = None,
 ):
     """Trigger an immediate check cycle."""
-    from fastapi import BackgroundTasks as BT
     engines = request.app.state.engines
 
     if adapter and adapter not in engines:
@@ -336,9 +367,6 @@ async def get_schedule(request: Request):
     """Scheduler task status."""
     return {"tasks": request.app.state.scheduler.get_status()}
 
-
-# Needed for POST /check BackgroundTasks
-from fastapi import BackgroundTasks, HTTPException
 
 
 # ─── Entry Point ─────────────────────────────────────────────────────────────

@@ -1,0 +1,343 @@
+terraform {
+  required_version = ">= 1.5.0"
+
+  required_providers {
+    stackit = {
+      source  = "stackitcloud/stackit"
+      version = "~> 0.90"
+    }
+  }
+}
+
+provider "stackit" {
+  default_region = var.region
+}
+
+
+variable "project_id" {
+  description = "STACKIT project UUID"
+  type        = string
+}
+
+variable "region" {
+  description = "STACKIT region, for example eu01"
+  type        = string
+  default     = "eu01"
+}
+
+variable "availability_zone" {
+  description = "STACKIT AZ, for example eu01-1"
+  type        = string
+  default     = "eu01-1"
+}
+
+variable "network_name" {
+  description = "Name of the virtual network"
+  type        = string
+  default     = "sb-main-network"
+}
+
+variable "network_cidr" {
+  description = "CIDR for the STACKIT virtual network"
+  type        = string
+  default     = "10.10.0.0/24"
+}
+
+variable "vm_name" {
+  description = "Name of the VM"
+  type        = string
+  default     = "sb-app-vm-01"
+}
+
+variable "vm_machine_type" {
+  description = "STACKIT machine type"
+  type        = string
+  default     = "g2i.1"
+}
+
+variable "boot_volume_size" {
+  description = "Boot disk size in GB"
+  type        = number
+  default     = 50
+}
+
+variable "image_id" {
+  description = "STACKIT image UUID for the OS image"
+  type        = string
+}
+
+variable "data_volume_name" {
+  description = "Extra block volume name"
+  type        = string
+  default     = "sb-data-volume-01"
+}
+
+variable "data_volume_size" {
+  description = "Extra block volume size in GB"
+  type        = number
+  default     = 100
+}
+
+variable "allowed_ssh_cidr" {
+  description = "CIDR allowed for SSH"
+  type        = string
+  default     = "0.0.0.0/0"
+}
+
+variable "k8s_cluster_name" {
+  description = "SKE cluster name"
+  type        = string
+  default     = "sb-ske-cluster"
+}
+
+variable "k8s_version_min" {
+  description = "Minimum Kubernetes version"
+  type        = string
+  default     = "1.34"
+}
+
+variable "k8s_nodepool_name" {
+  description = "Node pool name"
+  type        = string
+  default     = "general-pool"
+}
+
+variable "k8s_node_machine_type" {
+  description = "Node pool machine type"
+  type        = string
+  default     = "g2i.2"
+}
+
+variable "k8s_node_os_name" {
+  description = "SKE node OS name"
+  type        = string
+  default     = "flatcar"
+}
+
+variable "k8s_node_os_version" {
+  description = "SKE node OS version"
+  type        = string
+}
+
+variable "k8s_node_min" {
+  description = "Minimum nodes in the pool"
+  type        = number
+  default     = 2
+}
+
+variable "k8s_node_max" {
+  description = "Maximum nodes in the pool"
+  type        = number
+  default     = 3
+}
+
+variable "k8s_node_volume_type" {
+  description = "Volume type for worker nodes"
+  type        = string
+  default     = "storage_premium_perf6"
+}
+
+variable "k8s_node_volume_size" {
+  description = "Node volume size in GB"
+  type        = number
+  default     = 50
+}
+
+variable "labels" {
+  description = "Common labels"
+  type        = map(string)
+  default = {
+    environment = "dev"
+    managed_by  = "terraform"
+    project     = "strategybase"
+  }
+}
+
+
+
+
+########################################
+# NETWORK (VPC-like)
+########################################
+resource "stackit_network" "main" {
+  project_id  = var.project_id
+  name        = var.network_name
+  ipv4_prefix = var.network_cidr
+  routed      = true
+  labels      = var.labels
+}
+
+########################################
+# SECURITY GROUP
+########################################
+resource "stackit_security_group" "vm_sg" {
+  project_id = var.project_id
+  name       = "${var.vm_name}-sg"
+  labels     = var.labels
+}
+
+resource "stackit_security_group_rule" "vm_ingress_ssh" {
+  project_id         = var.project_id
+  security_group_id  = stackit_security_group.vm_sg.security_group_id
+  direction          = "ingress"
+  protocol           = "tcp"
+  port_range_min     = 22
+  port_range_max     = 22
+  remote_ip_prefix   = var.allowed_ssh_cidr
+  description        = "Allow SSH"
+}
+
+resource "stackit_security_group_rule" "vm_egress_all" {
+  project_id         = var.project_id
+  security_group_id  = stackit_security_group.vm_sg.security_group_id
+  direction          = "egress"
+  protocol           = "any"
+  remote_ip_prefix   = "0.0.0.0/0"
+  description        = "Allow all outbound"
+}
+
+########################################
+# NIC
+########################################
+resource "stackit_network_interface" "vm_nic" {
+  project_id         = var.project_id
+  network_id         = stackit_network.main.network_id
+  security_group_ids = [stackit_security_group.vm_sg.security_group_id]
+}
+
+########################################
+# VM / SERVER
+########################################
+resource "stackit_server" "vm" {
+  project_id        = var.project_id
+  name              = var.vm_name
+  availability_zone = var.availability_zone
+  machine_type      = var.vm_machine_type
+
+  boot_volume = {
+    size        = var.boot_volume_size
+    source_type = "image"
+    source_id   = var.image_id
+  }
+
+  network_interfaces = [
+    stackit_network_interface.vm_nic.network_interface_id
+  ]
+
+  labels = var.labels
+}
+
+########################################
+# EXTRA EBS-LIKE VOLUME
+########################################
+resource "stackit_volume" "data" {
+  project_id        = var.project_id
+  name              = var.data_volume_name
+  availability_zone = var.availability_zone
+  size              = var.data_volume_size
+  labels            = var.labels
+}
+
+resource "stackit_server_volume_attach" "data_attach" {
+  project_id = var.project_id
+  server_id  = stackit_server.vm.server_id
+  volume_id  = stackit_volume.data.volume_id
+}
+
+########################################
+# MANAGED KUBERNETES (SKE)
+########################################
+resource "stackit_ske_cluster" "k8s" {
+  project_id = var.project_id
+  name       = var.k8s_cluster_name
+
+  kubernetes_version_min = var.k8s_version_min
+
+  node_pools = [
+    {
+      name               = var.k8s_nodepool_name
+      machine_type       = var.k8s_node_machine_type
+      os_name            = var.k8s_node_os_name
+      os_version         = var.k8s_node_os_version
+      minimum            = tostring(var.k8s_node_min)
+      maximum            = tostring(var.k8s_node_max)
+      availability_zones = [var.availability_zone]
+      volume_type        = var.k8s_node_volume_type
+      volume_size        = tostring(var.k8s_node_volume_size)
+    }
+  ]
+
+  maintenance = {
+    enable_kubernetes_version_updates    = true
+    enable_machine_image_version_updates = true
+    start                                = "01:00:00Z"
+    end                                  = "02:00:00Z"
+  }
+
+  network = {
+    control_plane = {
+      access_scope = "PUBLIC"
+    }
+  }
+
+  labels = var.labels
+}
+
+
+
+output "network_id" {
+  value = stackit_network.main.network_id
+}
+
+output "vm_id" {
+  value = stackit_server.vm.server_id
+}
+
+output "vm_nic_id" {
+  value = stackit_network_interface.vm_nic.network_interface_id
+}
+
+output "data_volume_id" {
+  value = stackit_volume.data.volume_id
+}
+
+output "k8s_cluster_name" {
+  value = stackit_ske_cluster.k8s.name
+}
+
+
+project_id          = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+region              = "eu01"
+availability_zone   = "eu01-1"
+
+network_name        = "prod-main-network"
+network_cidr        = "10.20.0.0/24"
+
+vm_name             = "prod-app-01"
+vm_machine_type     = "g2i.1"
+boot_volume_size    = 50
+
+# Replace with a real STACKIT image UUID
+image_id            = "59838a89-51b1-4892-b57f-b3caf598ee2f"
+
+data_volume_name    = "prod-app-01-data"
+data_volume_size    = 200
+
+allowed_ssh_cidr    = "YOUR_PUBLIC_IP/32"
+
+k8s_cluster_name        = "prod-ske"
+k8s_version_min         = "1.34"
+k8s_nodepool_name       = "general-pool"
+k8s_node_machine_type   = "g2i.2"
+k8s_node_os_name        = "flatcar"
+k8s_node_os_version     = "3815.2.2"
+k8s_node_min            = 2
+k8s_node_max            = 4
+k8s_node_volume_type    = "storage_premium_perf6"
+k8s_node_volume_size    = 50
+
+labels = {
+  environment = "prod"
+  managed_by  = "terraform"
+  owner       = "kelvin"
+}

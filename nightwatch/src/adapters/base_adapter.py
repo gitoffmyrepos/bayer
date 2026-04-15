@@ -89,6 +89,9 @@ class Component:
             "category": self.category,
             "description": self.description,
             "metadata": self.metadata,
+            # Flatten status/last_seen from metadata to top level for frontend compatibility
+            "status": self.metadata.get("status", "unknown"),
+            "last_seen": self.metadata.get("last_seen"),
         }
 
 

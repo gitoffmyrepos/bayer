@@ -11,12 +11,19 @@ import {
   RefreshCw,
   XCircle,
   Minus,
+  Database,
+  Server,
+  BarChart2,
+  Layers,
+  Shield,
+  Monitor,
+  GitBranch,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { useHealth, useStatus, useIncidents } from '@/hooks/useNightwatch';
+import { useHealth, useStatus, useIncidents, useAdapters } from '@/hooks/useNightwatch';
 import { cn } from '@/lib/utils';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -26,7 +33,7 @@ function statusColor(status: string) {
     case 'healthy': return 'text-green-400';
     case 'degraded': return 'text-yellow-400';
     case 'unhealthy': return 'text-red-400';
-    default: return 'text-slate-400';
+    default: return 'text-zinc-400';
   }
 }
 
@@ -35,16 +42,19 @@ function statusBg(status: string) {
     case 'healthy': return 'bg-green-500/10 text-green-400 border-green-500/20';
     case 'degraded': return 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20';
     case 'unhealthy': return 'bg-red-500/10 text-red-400 border-red-500/20';
-    default: return 'bg-slate-500/10 text-slate-400 border-slate-500/20';
+    default: return 'bg-zinc-500/10 text-zinc-400 border-zinc-500/20';
   }
 }
 
 function severityBg(sev: string) {
-  switch (sev) {
-    case 'P1': return 'bg-red-500/10 text-red-400 border-red-500/20';
-    case 'P2': return 'bg-orange-500/10 text-orange-400 border-orange-500/20';
-    case 'P3': return 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20';
-    default: return 'bg-slate-500/10 text-slate-400 border-slate-500/20';
+  switch (sev?.toLowerCase()) {
+    case 'critical':
+    case 'p1': return 'bg-red-500/10 text-red-400 border-red-500/20';
+    case 'high':
+    case 'p2': return 'bg-orange-500/10 text-orange-400 border-orange-500/20';
+    case 'medium':
+    case 'p3': return 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20';
+    default: return 'bg-zinc-500/10 text-zinc-400 border-zinc-500/20';
   }
 }
 
@@ -58,6 +68,53 @@ function StatusIcon({ status }: { status: string }) {
   if (status === 'healthy') return <CheckCircle2 className="w-4 h-4 text-green-400" />;
   if (status === 'degraded') return <Minus className="w-4 h-4 text-yellow-400" />;
   return <XCircle className="w-4 h-4 text-red-400" />;
+}
+
+// ─── Subsystem Tile ──────────────────────────────────────────────────────────
+
+const SUBSYSTEM_META: Record<string, { icon: React.ElementType; color: string }> = {
+  'Trading Execution':    { icon: Activity,   color: 'text-blue-400' },
+  'ML / AI':              { icon: Cpu,        color: 'text-purple-400' },
+  'ETL Pipeline':         { icon: Layers,     color: 'text-cyan-400' },
+  'Analytics':            { icon: BarChart2,  color: 'text-indigo-400' },
+  'Data Layer':           { icon: Database,   color: 'text-orange-400' },
+  'Platform Services':    { icon: Shield,     color: 'text-teal-400' },
+  'Frontend & Tools':     { icon: Monitor,    color: 'text-pink-400' },
+  'Ops & Infrastructure': { icon: GitBranch,  color: 'text-yellow-400' },
+  'Cluster':              { icon: Server,     color: 'text-zinc-300' },
+  'Jenkins CI':           { icon: GitBranch,  color: 'text-orange-300' },
+};
+
+function SubsystemTile({
+  category, healthy, degraded, unhealthy, total,
+}: {
+  category: string; healthy: number; degraded: number; unhealthy: number; total: number;
+}) {
+  const meta = SUBSYSTEM_META[category] ?? { icon: Server, color: 'text-zinc-400' };
+  const Icon = meta.icon;
+  const status = unhealthy > 0 ? 'unhealthy' : degraded > 0 ? 'degraded' : 'healthy';
+  const statusColors = {
+    healthy:   'border-green-500/20 bg-green-500/5',
+    degraded:  'border-yellow-500/30 bg-yellow-500/5',
+    unhealthy: 'border-red-500/40 bg-red-500/8',
+  };
+  return (
+    <div className={cn('rounded-lg border p-3 bg-zinc-950 flex flex-col gap-2', statusColors[status])}>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Icon className={cn('w-4 h-4', meta.color)} />
+          <span className="text-xs font-semibold text-zinc-300 leading-tight">{category}</span>
+        </div>
+        <StatusIcon status={status} />
+      </div>
+      <div className="flex items-center gap-2 text-xs">
+        {unhealthy > 0 && <span className="text-red-400 font-bold">{unhealthy}✗</span>}
+        {degraded  > 0 && <span className="text-yellow-400 font-bold">{degraded}⚠</span>}
+        <span className="text-green-400">{healthy} ok</span>
+        <span className="text-zinc-600 ml-auto">{total}</span>
+      </div>
+    </div>
+  );
 }
 
 // ─── Stat Card ────────────────────────────────────────────────────────────────
@@ -76,18 +133,18 @@ function StatCard({
   loading?: boolean;
 }) {
   return (
-    <Card className="bg-slate-900 border-slate-800">
+    <Card className="bg-zinc-950 border-zinc-800">
       <CardContent className="p-5">
         <div className="flex items-start justify-between">
           <div>
-            <p className="text-xs text-slate-500 font-medium uppercase tracking-wider mb-1">{title}</p>
+            <p className="text-xs text-zinc-500 font-medium uppercase tracking-wider mb-1">{title}</p>
             {loading ? (
-              <Skeleton className="h-7 w-20 bg-slate-800" />
+              <Skeleton className="h-7 w-20 bg-zinc-800" />
             ) : (
               <p className={cn('text-2xl font-bold', color)}>{value}</p>
             )}
           </div>
-          <div className={cn('p-2 rounded-lg bg-slate-800/60')}>
+          <div className={cn('p-2 rounded-lg bg-zinc-900/60')}>
             <Icon className={cn('w-5 h-5', color)} />
           </div>
         </div>
@@ -104,17 +161,17 @@ function AdapterCard({ name, data }: { name: string; data: Record<string, unknow
   const components = ((data as Record<string, unknown>)?.details as Record<string, unknown>)?.components as Array<Record<string, unknown>> | undefined;
 
   return (
-    <Card className="bg-slate-900 border-slate-800">
+    <Card className="bg-zinc-950 border-zinc-800">
       <CardHeader className="pb-3">
         <div className="flex items-center justify-between">
-          <CardTitle className="text-sm font-semibold text-slate-100">{name}</CardTitle>
+          <CardTitle className="text-sm font-semibold text-white">{name}</CardTitle>
           <Badge variant="outline" className={cn('text-xs', statusBg(status))}>
             <StatusIcon status={status} />
             <span className="ml-1.5">{status.toUpperCase()}</span>
           </Badge>
         </div>
         {lastCheck && (
-          <p className="text-xs text-slate-500">
+          <p className="text-xs text-zinc-500">
             Last check: {formatDistanceToNow(new Date(lastCheck), { addSuffix: true })}
           </p>
         )}
@@ -122,12 +179,12 @@ function AdapterCard({ name, data }: { name: string; data: Record<string, unknow
       <CardContent className="pt-0">
         {components?.length ? (
           <div className="space-y-1.5">
-            {components.slice(0, 5).map((c, i) => (
+            {components.map((c, i) => (
               <div key={i} className="flex items-center justify-between text-xs">
-                <div className="flex items-center gap-2 text-slate-400">
+                <div className="flex items-center gap-2 text-zinc-400">
                   <StatusIcon status={c.status as string} />
                   <span>{c.name as string}</span>
-                  <span className="text-slate-600">({c.type as string})</span>
+                  <span className="text-zinc-600">({c.type as string})</span>
                 </div>
                 <span className={statusColor(c.status as string)}>
                   {(c.status as string).toUpperCase()}
@@ -136,7 +193,7 @@ function AdapterCard({ name, data }: { name: string; data: Record<string, unknow
             ))}
           </div>
         ) : (
-          <p className="text-xs text-slate-600">No component data</p>
+          <p className="text-xs text-zinc-600">No component data</p>
         )}
       </CardContent>
     </Card>
@@ -166,7 +223,7 @@ function IncidentRow({
 }) {
   return (
     <tr
-      className="border-b border-slate-800 hover:bg-slate-800/40 cursor-pointer transition-colors"
+      className="border-b border-zinc-800 hover:bg-zinc-900/40 cursor-pointer transition-colors"
       onClick={onClick}
     >
       <td className="px-4 py-3">
@@ -174,9 +231,9 @@ function IncidentRow({
           {incident.severity}
         </Badge>
       </td>
-      <td className="px-4 py-3 text-sm text-slate-300">{incident.component}</td>
-      <td className="px-4 py-3 text-sm text-slate-400 max-w-xs truncate">{incident.message}</td>
-      <td className="px-4 py-3 text-xs text-slate-500">
+      <td className="px-4 py-3 text-sm text-zinc-300">{incident.component}</td>
+      <td className="px-4 py-3 text-sm text-zinc-400 max-w-xs truncate">{incident.message}</td>
+      <td className="px-4 py-3 text-xs text-zinc-500">
         {formatDistanceToNow(new Date(incident.started_at), { addSuffix: true })}
       </td>
       <td className="px-4 py-3">
@@ -202,8 +259,39 @@ export default function DashboardPage() {
   const { data: health, isLoading: healthLoading } = useHealth();
   const { data: status, isLoading: statusLoading } = useStatus();
   const { data: incidents, isLoading: incidentsLoading } = useIncidents({ limit: 10 });
+  const { data: adaptersData } = useAdapters();
 
   const [selectedIncident, setSelectedIncident] = useState<Incident | null>(null);
+
+  // Build subsystem summary from adapter components
+  const subsystems: Record<string, { healthy: number; degraded: number; unhealthy: number; total: number }> = {};
+  for (const adapter of (adaptersData?.adapters ?? [])) {
+    for (const comp of adapter.components) {
+      const cat = comp.category ?? 'Kubernetes';
+      if (!subsystems[cat]) subsystems[cat] = { healthy: 0, degraded: 0, unhealthy: 0, total: 0 };
+      const st = (comp.status ?? 'unknown') as string;
+      subsystems[cat].total++;
+      if (st === 'healthy' || st === 'scaled_down') subsystems[cat].healthy++;
+      else if (st === 'degraded') subsystems[cat].degraded++;
+      else if (st === 'unhealthy') subsystems[cat].unhealthy++;
+    }
+  }
+
+  // Only show subsystems in the defined order (skip minor ones if empty)
+  const SUBSYSTEM_ORDER = [
+    'Trading Execution', 'ML / AI', 'ETL Pipeline', 'Analytics',
+    'Data Layer', 'Platform Services', 'Frontend & Tools', 'Ops & Infrastructure',
+    'Cluster', 'Jenkins CI',
+  ];
+  const subsystemEntries = SUBSYSTEM_ORDER
+    .filter(k => subsystems[k])
+    .map(k => ({ category: k, ...subsystems[k] }))
+    .sort((a, b) => {
+      // Unhealthy/degraded categories first
+      if (b.unhealthy !== a.unhealthy) return b.unhealthy - a.unhealthy;
+      if (b.degraded  !== a.degraded)  return b.degraded  - a.degraded;
+      return 0;
+    });
 
   const adapters = status?.adapters ?? {};
   const adapterCount = Object.keys(adapters).length;
@@ -213,10 +301,10 @@ export default function DashboardPage() {
     <div className="p-6 lg:pt-6 pt-16 space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-bold text-slate-100">Dashboard</h1>
-          <p className="text-sm text-slate-500">Real-time monitoring overview</p>
+        <h1 className="text-xl font-bold text-white">Dashboard</h1>
+          <p className="text-sm text-zinc-500">Real-time monitoring overview</p>
         </div>
-        <div className="flex items-center gap-2 text-xs text-slate-500">
+        <div className="flex items-center gap-2 text-xs text-zinc-500">
           <RefreshCw className="w-3.5 h-3.5 animate-spin" />
           Auto-refreshing
         </div>
@@ -242,7 +330,7 @@ export default function DashboardPage() {
           title="Adapters"
           value={adapterCount}
           icon={Cpu}
-          color="text-indigo-400"
+          color="text-red-500"
           loading={statusLoading}
         />
         <StatCard
@@ -254,27 +342,41 @@ export default function DashboardPage() {
         />
       </div>
 
-      {/* Row 2 — Adapter Panels */}
+      {/* Row 2 — Subsystem Health Grid */}
+      {subsystemEntries.length > 0 && (
+        <div>
+          <h2 className="text-sm font-semibold text-zinc-500 uppercase tracking-wider mb-3">
+            Subsystem Health
+          </h2>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
+            {subsystemEntries.map(s => (
+              <SubsystemTile key={s.category} {...s} />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Row 3 — Adapter Panels */}
       <div>
-        <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-3">
+        <h2 className="text-sm font-semibold text-zinc-500 uppercase tracking-wider mb-3">
           Adapter Status
         </h2>
         {statusLoading ? (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             {[0, 1].map((i) => (
-              <Card key={i} className="bg-slate-900 border-slate-800">
+              <Card key={i} className="bg-zinc-950 border-zinc-800">
                 <CardContent className="p-5">
-                  <Skeleton className="h-5 w-32 bg-slate-800 mb-3" />
-                  <Skeleton className="h-3 w-full bg-slate-800 mb-2" />
-                  <Skeleton className="h-3 w-4/5 bg-slate-800" />
+                  <Skeleton className="h-5 w-32 bg-zinc-800 mb-3" />
+                  <Skeleton className="h-3 w-full bg-zinc-800 mb-2" />
+                  <Skeleton className="h-3 w-4/5 bg-zinc-800" />
                 </CardContent>
               </Card>
             ))}
           </div>
         ) : adapterCount === 0 ? (
-          <Card className="bg-slate-900 border-slate-800">
-            <CardContent className="p-8 text-center text-slate-500 text-sm">
-              No adapters configured. Add adapters to <code className="text-slate-400">config/nightwatch.yaml</code>
+          <Card className="bg-zinc-950 border-zinc-800">
+            <CardContent className="p-8 text-center text-zinc-500 text-sm">
+              No adapters configured. Add adapters to <code className="text-zinc-400">config/nightwatch.yaml</code>
             </CardContent>
           </Card>
         ) : (
@@ -288,18 +390,18 @@ export default function DashboardPage() {
 
       {/* Row 3 — Recent Incidents */}
       <div>
-        <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-3">
+        <h2 className="text-sm font-semibold text-zinc-500 uppercase tracking-wider mb-3">
           Recent Incidents
         </h2>
-        <Card className="bg-slate-900 border-slate-800">
+        <Card className="bg-zinc-950 border-zinc-800">
           {incidentsLoading ? (
             <CardContent className="p-4 space-y-3">
               {[0, 1, 2].map((i) => (
-                <Skeleton key={i} className="h-10 w-full bg-slate-800" />
+                <Skeleton key={i} className="h-10 w-full bg-zinc-800" />
               ))}
             </CardContent>
           ) : incidents?.incidents?.length === 0 ? (
-            <CardContent className="p-8 text-center text-slate-500 text-sm">
+            <CardContent className="p-8 text-center text-zinc-500 text-sm">
               <CheckCircle2 className="w-8 h-8 text-green-500/40 mx-auto mb-2" />
               No incidents — all systems healthy
             </CardContent>
@@ -307,12 +409,12 @@ export default function DashboardPage() {
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead>
-                  <tr className="border-b border-slate-800">
-                    <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Severity</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Component</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Message</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Time</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Status</th>
+                  <tr className="border-b border-zinc-800">
+                    <th className="px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase">Severity</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase">Component</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase">Message</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase">Time</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-zinc-500 uppercase">Status</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -332,10 +434,10 @@ export default function DashboardPage() {
 
       {/* Row 4 — Activity Feed */}
       <div>
-        <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-3">
+        <h2 className="text-sm font-semibold text-zinc-500 uppercase tracking-wider mb-3">
           Activity Feed
         </h2>
-        <Card className="bg-slate-900 border-slate-800">
+        <Card className="bg-zinc-950 border-zinc-800">
           <CardContent className="p-4 space-y-2">
             {Object.entries(adapters as Record<string, Record<string, unknown>>).flatMap(([name, data]) => {
               const comps = ((data?.details as Record<string, unknown>)?.components as Array<Record<string, unknown>>) ?? [];
@@ -349,18 +451,18 @@ export default function DashboardPage() {
             }).sort((a, b) => b.time.getTime() - a.time.getTime()).slice(0, 10).map((item) => (
               <div key={item.key} className="flex items-center gap-3 text-xs py-1">
                 <StatusIcon status={item.status} />
-                <span className="text-slate-500 w-20 flex-shrink-0">
+                <span className="text-zinc-500 w-20 flex-shrink-0">
                   {formatDistanceToNow(item.time, { addSuffix: true })}
                 </span>
-                <span className="text-slate-400 font-medium">[{item.adapter}]</span>
-                <span className="text-slate-300">{item.component}</span>
+                <span className="text-zinc-400 font-medium">[{item.adapter}]</span>
+                <span className="text-zinc-300">{item.component}</span>
                 <span className={cn('ml-auto font-semibold', statusColor(item.status))}>
                   {item.status.toUpperCase()}
                 </span>
               </div>
             ))}
             {Object.keys(adapters).length === 0 && (
-              <p className="text-xs text-slate-600 text-center py-4">No activity yet</p>
+              <p className="text-xs text-zinc-600 text-center py-4">No activity yet</p>
             )}
           </CardContent>
         </Card>
@@ -368,7 +470,7 @@ export default function DashboardPage() {
 
       {/* Incident Detail Dialog */}
       <Dialog open={!!selectedIncident} onOpenChange={() => setSelectedIncident(null)}>
-        <DialogContent className="bg-slate-900 border-slate-800 text-slate-100 max-w-2xl">
+        <DialogContent className="bg-zinc-950 border-zinc-800 text-white max-w-2xl">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               {selectedIncident && (
@@ -383,34 +485,34 @@ export default function DashboardPage() {
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-3 text-sm">
                 <div>
-                  <p className="text-slate-500 text-xs mb-1">Component</p>
-                  <p className="text-slate-200 font-medium">{selectedIncident.component}</p>
+                  <p className="text-zinc-500 text-xs mb-1">Component</p>
+                  <p className="text-zinc-200 font-medium">{selectedIncident.component}</p>
                 </div>
                 <div>
-                  <p className="text-slate-500 text-xs mb-1">Adapter</p>
-                  <p className="text-slate-200 font-medium">{selectedIncident.adapter}</p>
+                  <p className="text-zinc-500 text-xs mb-1">Adapter</p>
+                  <p className="text-zinc-200 font-medium">{selectedIncident.adapter}</p>
                 </div>
                 <div>
-                  <p className="text-slate-500 text-xs mb-1">Started</p>
-                  <p className="text-slate-200">{new Date(selectedIncident.started_at).toLocaleString()}</p>
+                  <p className="text-zinc-500 text-xs mb-1">Started</p>
+                  <p className="text-zinc-200">{new Date(selectedIncident.started_at).toLocaleString()}</p>
                 </div>
                 <div>
-                  <p className="text-slate-500 text-xs mb-1">Status</p>
+                  <p className="text-zinc-500 text-xs mb-1">Status</p>
                   <Badge variant="outline" className={cn('text-xs', selectedIncident.status === 'active' ? 'bg-red-500/10 text-red-400 border-red-500/20' : 'bg-green-500/10 text-green-400 border-green-500/20')}>
                     {selectedIncident.status}
                   </Badge>
                 </div>
               </div>
               <div>
-                <p className="text-slate-500 text-xs mb-1">Message</p>
-                <p className="text-slate-200 text-sm bg-slate-800 rounded-lg p-3">{selectedIncident.message}</p>
+                <p className="text-zinc-500 text-xs mb-1">Message</p>
+                <p className="text-zinc-200 text-sm bg-zinc-900 rounded-lg p-3">{selectedIncident.message}</p>
               </div>
               {selectedIncident.ai_analysis && (
                 <div>
-                  <p className="text-slate-500 text-xs mb-1 flex items-center gap-1">
+                  <p className="text-zinc-500 text-xs mb-1 flex items-center gap-1">
                     <span>⚡</span> AI Analysis
                   </p>
-                  <p className="text-slate-300 text-sm bg-indigo-950/40 border border-indigo-500/20 rounded-lg p-3 leading-relaxed">
+                  <p className="text-zinc-300 text-sm bg-red-950/30 border border-red-600/20 rounded-lg p-3 leading-relaxed">
                     {selectedIncident.ai_analysis}
                   </p>
                 </div>

@@ -102,6 +102,11 @@ class NightwatchConfig:
         return self.llm.get("provider", "anthropic")
 
     @property
+    def remediation_llm(self) -> dict:
+        """Optional dedicated LLM for auto-remediation / healing. Falls back to primary `llm`."""
+        return self._raw.get("remediation_llm", {}) or self.llm
+
+    @property
     def adapters(self) -> list:
         return self._raw.get("adapters", [])
 

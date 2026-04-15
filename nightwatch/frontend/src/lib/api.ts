@@ -1,4 +1,6 @@
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
+// In production, the gateway routes /api/* → backend (strips /api prefix).
+// In local dev, override with: NEXT_PUBLIC_API_URL=http://localhost:8080 npm run dev
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || '/api';
 
 // ─── Mock Data ────────────────────────────────────────────────────────────────
 const mockStatus = {
@@ -75,12 +77,12 @@ const mockAdapters = {
       is_running: true,
       check_count: 47,
       components: [
-        { name: 'ml-trainer', type: 'kubernetes', status: 'healthy', last_seen: new Date().toISOString() },
-        { name: 'api-gateway', type: 'kubernetes', status: 'healthy', last_seen: new Date().toISOString() },
-        { name: 'timescaledb', type: 'database', status: 'healthy', last_seen: new Date().toISOString() },
-        { name: 'redpanda', type: 'messaging', status: 'healthy', last_seen: new Date().toISOString() },
-        { name: 'qdrant', type: 'vector-db', status: 'healthy', last_seen: new Date().toISOString() },
-        { name: 'oanda-feed', type: 'external', status: 'healthy', last_seen: new Date().toISOString() },
+        { name: 'ml-trainer', type: 'kubernetes', status: 'healthy', category: 'ML / AI', description: '1/1 replicas', last_seen: new Date().toISOString() },
+        { name: 'api-gateway', type: 'kubernetes', status: 'healthy', category: 'Ops & Infrastructure', description: '2/2 replicas', last_seen: new Date().toISOString() },
+        { name: 'timescaledb', type: 'cnpg_cluster', status: 'degraded', category: 'Data Layer', description: '1/1 instances', last_seen: new Date().toISOString() },
+        { name: 'redpanda', type: 'k8s_statefulset', status: 'degraded', category: 'Data Layer', description: '1/3 pods ready', last_seen: new Date().toISOString() },
+        { name: 'qdrant', type: 'k8s_statefulset', status: 'healthy', category: 'Data Layer', description: '1/1 pods ready', last_seen: new Date().toISOString() },
+        { name: 'oanda-account', type: 'broker_api', status: 'healthy', category: 'OANDA', description: 'OANDA FX broker account', last_seen: new Date().toISOString() },
       ],
     },
     {
@@ -90,10 +92,10 @@ const mockAdapters = {
       is_running: true,
       check_count: 23,
       components: [
-        { name: 's3-ingestion', type: 'aws', status: 'healthy', last_seen: new Date().toISOString() },
-        { name: 'lambda-processor', type: 'aws', status: 'degraded', last_seen: new Date().toISOString() },
-        { name: 'rds-postgres', type: 'database', status: 'healthy', last_seen: new Date().toISOString() },
-        { name: 'cloudwatch-metrics', type: 'monitoring', status: 'healthy', last_seen: new Date().toISOString() },
+        { name: 's3-ingestion', type: 'aws', status: 'healthy', category: 'ETL Pipeline', description: 'S3 ingestion bucket', last_seen: new Date().toISOString() },
+        { name: 'lambda-processor', type: 'aws', status: 'degraded', category: 'ETL Pipeline', description: 'Lambda function', last_seen: new Date().toISOString() },
+        { name: 'rds-postgres', type: 'database', status: 'healthy', category: 'Data Layer', description: 'RDS PostgreSQL', last_seen: new Date().toISOString() },
+        { name: 'cloudwatch-metrics', type: 'monitoring', status: 'healthy', category: 'Analytics', description: 'CloudWatch', last_seen: new Date().toISOString() },
       ],
     },
   ],

@@ -42,7 +42,7 @@ oanda_api_key: ${OANDA_API_KEY}
 health_endpoints:
   # External endpoints
   - name: API Gateway (external)
-    url: https://forex.strategybase.io/api/health
+    url: https://forex.strategybase.io/health
     expected_status: 200
   - name: Frontend (external)
     url: https://forex.strategybase.io

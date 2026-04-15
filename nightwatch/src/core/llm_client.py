@@ -241,9 +241,13 @@ Be specific about any issues found."""
         raise LLMError(f"LLM call failed after {retries + 1} attempts: {last_error}")
 
     def _call_anthropic(self, prompt: str) -> str:
-        """Call Anthropic Claude API."""
+        """Call Anthropic Claude API (or any Anthropic-compatible endpoint, e.g. MiniMax)."""
         import anthropic
-        client = anthropic.Anthropic(api_key=self.api_key)
+        # Honor base_url so Anthropic-compat providers (MiniMax) work through the same path
+        kwargs = {"api_key": self.api_key}
+        if self.base_url:
+            kwargs["base_url"] = self.base_url
+        client = anthropic.Anthropic(**kwargs)
         message = client.messages.create(
             model=self.model,
             max_tokens=self.max_tokens,
