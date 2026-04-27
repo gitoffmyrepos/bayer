@@ -373,10 +373,15 @@ class NightwatchEngine:
 
                 else:
                     # Application code error → analyze and send to Nova
-                    log.info(f"application_error_detected: {resource_name}, analyzing for Nova")
+                    # Resolve a real pod name if we only have a check_id like "deploy_forextrader_X"
+                    real_pod = pod_name or self._resolve_pod_for_check(namespace, resource_name)
+                    if not real_pod:
+                        log.info(f"app_error_skipped_no_pod: {resource_name} (no pod resolvable — likely deployment-level issue, not pod error)")
+                        continue
+                    log.info(f"application_error_detected: {resource_name} -> pod={real_pod}, analyzing for Nova")
                     if self._code_analyzer:
                         analysis = await self._code_analyzer.analyze_pod_error(
-                            namespace, pod_name or resource_name
+                            namespace, real_pod
                         )
                         msg = self._code_analyzer.format_discord_message(analysis)
                         await self.alert_manager.send_discord_raw(msg)
@@ -419,6 +424,48 @@ class NightwatchEngine:
         import re
         name = re.sub(r"-[a-f0-9]{8,10}-[a-z0-9]{5}$", "", name)
         return name
+
+    def _resolve_pod_for_check(self, namespace: str, resource_name: str) -> str:
+        """Convert a check_id like 'deploy_forextrader_autonomous_trading' to a real pod name.
+
+        Strategy: derive the deployment name (strip 'deploy_' prefix, swap _ for -),
+        then look up a representative pod via label selector or name prefix match.
+        Returns empty string if no pod can be resolved.
+        """
+        import subprocess
+        import json as _json
+
+        # Convert check_id format -> deployment name
+        deploy_name = resource_name
+        if deploy_name.startswith("deploy_"):
+            deploy_name = deploy_name[len("deploy_"):]
+        # Common suffixes added by adapter checks (e.g. _ready, _found, _replicas)
+        for suffix in ("_ready", "_found", "_replicas", "_health"):
+            if deploy_name.endswith(suffix):
+                deploy_name = deploy_name[: -len(suffix)]
+        deploy_name = deploy_name.replace("_", "-")
+
+        if not deploy_name:
+            return ""
+
+        try:
+            # Try by name prefix first (most reliable for forextrader naming convention)
+            result = subprocess.run(
+                ["kubectl", "get", "pods", "-n", namespace,
+                 "-o", "jsonpath={.items[*].metadata.name}"],
+                capture_output=True, text=True, timeout=10,
+            )
+            if result.returncode == 0 and result.stdout:
+                pods = result.stdout.split()
+                # Prefer pods that start with the exact deployment name + '-'
+                prefix = deploy_name + "-"
+                matches = [p for p in pods if p.startswith(prefix)]
+                if matches:
+                    return matches[0]
+        except Exception as e:
+            log.warning(f"resolve_pod_failed: {resource_name} -> {deploy_name}: {e}")
+
+        return ""
 
     # ─── Alerting ─────────────────────────────────────────────────────────────
 
