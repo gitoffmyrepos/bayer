@@ -169,6 +169,15 @@ class NightwatchEngine:
         self._check_count = 0
         self._consecutive_failures = 0
 
+        # Dedup map for code-analyzer / remediation Discord alerts.
+        # Key: f"{namespace}/{pod}/{error_signature}" → last_sent_epoch_seconds
+        # Prevents the same pod-level fix recommendation from spamming the channel
+        # every minute when the underlying issue persists.
+        self._app_alert_dedup: dict[str, float] = {}
+        self._app_alert_dedup_window_s = float(
+            config.get("nightwatch", {}).get("app_alert_dedup_window_seconds", 1800)
+        )
+
     # ─── Main Loop ────────────────────────────────────────────────────────────
 
     async def start(self) -> None:
@@ -376,7 +385,16 @@ class NightwatchEngine:
                     # Skip pod-level analysis for deployment-state checks — those are covered
                     # by the main incident alert and don't represent a pod-level error.
                     check_name = (getattr(check, "name", "") or "").lower()
-                    if check_name.endswith(("_ready", "_replicas", "_found", "_health", "_available")):
+                    check_msg = (getattr(check, "message", "") or "").lower()
+                    # Deployment-state checks (deploy_*, replica counts, etc.) are not pod errors.
+                    # They're already covered by the main incident summary alert.
+                    is_state_check = (
+                        check_name.startswith("deploy_")
+                        or check_name.endswith(("_ready", "_replicas", "_found", "_health", "_available"))
+                        or "replicas ready" in check_msg
+                        or "scaled" in check_msg
+                    )
+                    if is_state_check:
                         log.debug(f"app_error_skipped_state_check: {resource_name} (deployment-state check, not a pod error)")
                         continue
 
@@ -396,8 +414,25 @@ class NightwatchEngine:
                         analysis = await self._code_analyzer.analyze_pod_error(
                             namespace, real_pod
                         )
+
+                        # Dedup by (namespace, pod, error signature) to avoid
+                        # firing the same fix recommendation every minute.
+                        import time as _time
+                        err_sig = (analysis.error_summary or "")[:120].strip().lower()
+                        dedup_key = f"{namespace}/{real_pod}/{err_sig}"
+                        now_s = _time.time()
+                        last_sent = self._app_alert_dedup.get(dedup_key, 0.0)
+                        if now_s - last_sent < self._app_alert_dedup_window_s:
+                            elapsed = now_s - last_sent
+                            log.info(
+                                f"app_alert_deduplicated: {dedup_key} (last sent {elapsed:.0f}s ago, window {self._app_alert_dedup_window_s:.0f}s)"
+                            )
+                            return {"success": False, "description": f"App error in {resource_name} — deduplicated",
+                                    "deduplicated": True}
+
                         msg = self._code_analyzer.format_discord_message(analysis)
                         await self.alert_manager.send_discord_raw(msg)
+                        self._app_alert_dedup[dedup_key] = now_s
                         return {"success": False, "description": f"App error in {resource_name} — sent to Nova",
                                 "escalated": True}
 

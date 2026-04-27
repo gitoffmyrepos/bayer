@@ -312,8 +312,31 @@ EXPLANATION: <2-3 sentences on why this fix works>"""
                 "inline": False,
             })
 
+        # Build a plain-text content body so Nova (Discord ingestion) actually
+        # receives the analysis details — embeds are not surfaced to the agent.
+        content_lines = [
+            f"<@{NOVA_MENTION_ID}> 🚨 **{analysis.severity.upper()}** | Application error: `{analysis.service_name}`",
+            f"**Pod:** `{analysis.pod_name}`",
+            f"**Error:** {analysis.error_summary[:300]}",
+            f"**Root Cause:** {analysis.root_cause[:400]}",
+        ]
+        if analysis.source_file:
+            loc = f"`{analysis.source_file}`"
+            if analysis.line_number:
+                loc += f" (line {analysis.line_number})"
+            content_lines.append(f"**File:** {loc}")
+        if analysis.recommended_fix:
+            content_lines.append(f"**Fix:** {analysis.recommended_fix[:600]}")
+        if analysis.code_diff:
+            content_lines.append(f"**Why:** {analysis.code_diff[:300]}")
+
+        content = "\n".join(content_lines)
+        # Discord content hard limit is 2000 chars
+        if len(content) > 1900:
+            content = content[:1900] + "\n… (truncated; see embed for full detail)"
+
         return {
-            "content": f"<@{NOVA_MENTION_ID}> Application error detected — fix recommendation below",
+            "content": content,
             "embeds": [{
                 "title": f"🚨 Application Error: {analysis.service_name}",
                 "description": description,
