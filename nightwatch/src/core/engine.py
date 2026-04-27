@@ -373,13 +373,26 @@ class NightwatchEngine:
 
                 else:
                     # Application code error → analyze and send to Nova
+                    # Skip pod-level analysis for deployment-state checks — those are covered
+                    # by the main incident alert and don't represent a pod-level error.
+                    check_name = (getattr(check, "name", "") or "").lower()
+                    if check_name.endswith(("_ready", "_replicas", "_found", "_health", "_available")):
+                        log.debug(f"app_error_skipped_state_check: {resource_name} (deployment-state check, not a pod error)")
+                        continue
+
                     # Resolve a real pod name if we only have a check_id like "deploy_forextrader_X"
                     real_pod = pod_name or self._resolve_pod_for_check(namespace, resource_name)
                     if not real_pod:
                         log.info(f"app_error_skipped_no_pod: {resource_name} (no pod resolvable — likely deployment-level issue, not pod error)")
                         continue
-                    log.info(f"application_error_detected: {resource_name} -> pod={real_pod}, analyzing for Nova")
+
+                    # Only proceed if the pod logs actually contain an error signal.
                     if self._code_analyzer:
+                        logs_preview = self._code_analyzer._get_pod_logs(namespace, real_pod, lines=200)
+                        if not self._code_analyzer._extract_error_message(logs_preview):
+                            log.debug(f"app_error_skipped_no_log_error: {real_pod} (logs clean, suppressing alert)")
+                            continue
+                        log.info(f"application_error_detected: {resource_name} -> pod={real_pod}, analyzing for Nova")
                         analysis = await self._code_analyzer.analyze_pod_error(
                             namespace, real_pod
                         )
