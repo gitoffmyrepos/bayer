@@ -7,10 +7,20 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# Install system dependencies for boto3, kubernetes client, httpx
+# Install system dependencies for boto3, kubernetes client, httpx,
+# and kubectl (used by remediation/log collection helpers).
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     ca-certificates \
+    && ARCH="$(dpkg --print-architecture)" \
+    && case "$ARCH" in \
+        amd64) K8S_ARCH="amd64" ;; \
+        arm64) K8S_ARCH="arm64" ;; \
+        *) echo "Unsupported architecture: $ARCH" && exit 1 ;; \
+       esac \
+    && KUBECTL_VERSION="$(curl -fsSL https://dl.k8s.io/release/stable.txt)" \
+    && curl -fsSLo /usr/local/bin/kubectl "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/${K8S_ARCH}/kubectl" \
+    && chmod +x /usr/local/bin/kubectl \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Python dependencies
