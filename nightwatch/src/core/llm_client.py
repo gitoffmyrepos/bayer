@@ -226,7 +226,9 @@ Be specific about any issues found."""
                 if self.provider == "anthropic":
                     return self._call_anthropic(prompt)
                 elif self.provider == "openai":
-                    return self._call_openai(prompt, base_url="https://api.openai.com/v1")
+                    # Use configured base_url if set (e.g. Ollama OpenAI-compat), else real OpenAI
+                    _oai_base = self.base_url or "https://api.openai.com/v1"
+                    return self._call_openai(prompt, base_url=_oai_base)
                 elif self.provider == "deepseek":
                     return self._call_openai(prompt, base_url=self.DEEPSEEK_BASE_URL)
                 elif self.provider == "ollama":
