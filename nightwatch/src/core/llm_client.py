@@ -273,7 +273,7 @@ Be specific about any issues found."""
     def _call_ollama(self, prompt: str) -> str:
         """Call local Ollama instance."""
         base_url = self.base_url or "http://localhost:11434"
-        url = f"{base_url}/api/generate"
+        url = f"{base_url}/api/chat"
 
         with httpx.Client(timeout=self.timeout) as client:
             response = client.post(url, json={
