@@ -33,6 +33,11 @@ from src.core.config import NightwatchConfig
 from src.core.engine import NightwatchEngine
 from src.core.llm_client import NightwatchLLMClient
 from src.core.scheduler import NightwatchScheduler
+from src.k8s.dedup_store import DedupStore
+from src.k8s.event_watcher import DEFAULT_ALLOWED_REASONS, K8sEventWatcher
+from src.k8s.issue_body import IssueBodyBuilder
+from src.k8s.issue_creator import K8sIssueCreator, default_adapter_factory
+from src.k8s.routing import RepoRouter
 
 # ─── Logging setup ───────────────────────────────────────────────────────────
 
@@ -200,6 +205,71 @@ async def lifespan(app: FastAPI):
     else:
         log.warning("no_engines_started", hint="Configure adapters in nightwatch.yaml")
 
+    # ─── K8s event → GitHub Issues integration ───────────────────────────────
+    # Disable cleanly if NIGHTWATCH_GH_ENABLED is false OR GITHUB_TOKEN missing.
+    # Defaults to dry-run mode so operator must explicitly flip to live posting.
+    app.state.k8s_issue_creator = None
+    app.state.k8s_event_watcher = None
+
+    gh_enabled = os.environ.get("NIGHTWATCH_GH_ENABLED", "true").strip().lower() in (
+        "1", "true", "yes", "on",
+    )
+    gh_dry_run = os.environ.get("NIGHTWATCH_GH_DRY_RUN", "true").strip().lower() in (
+        "1", "true", "yes", "on",
+    )
+    gh_token = os.environ.get("GITHUB_TOKEN", "").strip()
+
+    if not gh_enabled:
+        log.info("k8s_issue_creator_disabled_via_env")
+    elif not gh_token:
+        log.warning(
+            "k8s_issue_creator_skipped_no_github_token",
+            hint="set GITHUB_TOKEN to enable K8s event → GitHub Issues",
+        )
+    else:
+        gh_cfg = config.raw().get("github_issue_creator", {}) if config else {}
+        rules_path = os.environ.get(
+            "NIGHTWATCH_ROUTING_RULES",
+            gh_cfg.get("routing_rules_path", "/app/config/routing-rules.yaml"),
+        )
+        state_path = os.environ.get(
+            "NIGHTWATCH_DEDUP_STATE_PATH",
+            gh_cfg.get("state_path", "/var/lib/nightwatch/issue_fingerprints.json"),
+        )
+        allowed_reasons = set(
+            gh_cfg.get("allowed_reasons") or DEFAULT_ALLOWED_REASONS
+        )
+        try:
+            router_obj = RepoRouter.from_yaml(rules_path)
+            dedup_store = DedupStore(state_path)
+            body_builder = IssueBodyBuilder(llm_client=llm_client)
+            adapter_factory = default_adapter_factory(gh_token)
+            creator = K8sIssueCreator(
+                router=router_obj,
+                dedup_store=dedup_store,
+                body_builder=body_builder,
+                adapter_factory=adapter_factory,
+                allowed_reasons=allowed_reasons,
+                dry_run=gh_dry_run,
+            )
+            watcher = K8sEventWatcher(
+                handler=creator.handle_event,
+                allowed_reasons=allowed_reasons,
+                timeout_seconds=int(gh_cfg.get("watch_timeout_seconds", 300)),
+            )
+            await watcher.start()
+            app.state.k8s_issue_creator = creator
+            app.state.k8s_event_watcher = watcher
+            log.info(
+                "k8s_issue_creator_started",
+                dry_run=gh_dry_run,
+                rules=router_obj.rule_count,
+                state_path=state_path,
+                allowed_reasons=sorted(allowed_reasons),
+            )
+        except Exception as e:  # noqa: BLE001
+            log.error("k8s_issue_creator_start_failed", error=str(e))
+
     yield  # API is running
 
     # Shutdown
@@ -208,6 +278,16 @@ async def lifespan(app: FastAPI):
     for engine in app.state.engines.values():
         engine.stop()
         engine.adapter.cleanup()
+    if app.state.k8s_event_watcher is not None:
+        try:
+            await app.state.k8s_event_watcher.stop()
+        except Exception as e:  # noqa: BLE001
+            log.warning("k8s_event_watcher_stop_failed", error=str(e))
+    if app.state.k8s_issue_creator is not None:
+        try:
+            await app.state.k8s_issue_creator.close()
+        except Exception as e:  # noqa: BLE001
+            log.warning("k8s_issue_creator_close_failed", error=str(e))
     log.info("nightwatch_stopped")
 
 
