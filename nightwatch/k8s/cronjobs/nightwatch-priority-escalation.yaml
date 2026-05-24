@@ -1,0 +1,82 @@
+---
+# Hourly priority-escalation CronJob for the K8s event → GitHub issue pipeline.
+#
+# Iterates every (owner, name) pair discovered via the routing rules and runs
+# the existing 6h escalation cycle on each. The adapter enforces the
+# "≥6h since last escalation" rule, so it's safe to run hourly.
+#
+# Env contract matches the nightwatch-agent Deployment:
+#   GITHUB_TOKEN              from forextrader-research-secrets/github_token
+#   NIGHTWATCH_GH_DRY_RUN     defaults "true"
+#   NIGHTWATCH_ROUTING_RULES  path to routing rules YAML mounted from configmap
+#
+# Image is the same nightwatch-agent image so we never drift on dependency
+# versions or on the priority/escalation logic.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: nightwatch-priority-escalation
+  namespace: prod-forex
+  labels:
+    app: nightwatch-agent
+    tier: monitoring
+    component: priority-escalation
+spec:
+  schedule: "0 * * * *"  # hourly, on the hour, cluster TZ
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 5
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: 600  # 10 min hard cap
+      template:
+        metadata:
+          labels:
+            app: nightwatch-agent
+            tier: monitoring
+            component: priority-escalation
+        spec:
+          restartPolicy: Never
+          serviceAccountName: nightwatch-agent
+          containers:
+            - name: escalator
+              image: harbor.strategybase.io/sb-custom-docker-images/nightwatch-agent:prod-latest
+              imagePullPolicy: Always
+              command:
+                - python
+                - -m
+                - src.k8s.escalation_cli
+              env:
+                - name: GITHUB_TOKEN
+                  valueFrom:
+                    secretKeyRef:
+                      name: forextrader-research-secrets
+                      key: github_token
+                - name: NIGHTWATCH_GH_DRY_RUN
+                  value: "true"
+                - name: NIGHTWATCH_GH_ENABLED
+                  value: "true"
+                - name: NIGHTWATCH_ROUTING_RULES
+                  value: "/app/config/routing-rules.yaml"
+                - name: PYTHONUNBUFFERED
+                  value: "1"
+              volumeMounts:
+                - name: nightwatch-config
+                  mountPath: /app/config
+              resources:
+                requests:
+                  cpu: "50m"
+                  memory: "128Mi"
+                limits:
+                  cpu: "500m"
+                  memory: "512Mi"
+          volumes:
+            - name: nightwatch-config
+              projected:
+                sources:
+                  - configMap:
+                      name: nightwatch-config
+                  - configMap:
+                      name: nightwatch-routing-rules
+                      optional: true
