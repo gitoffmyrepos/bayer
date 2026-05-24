@@ -204,6 +204,27 @@ Use markdown formatting. Be professional and factual."""
 
         return self._call(prompt)
 
+    def complete(self, prompt: str, max_tokens: Optional[int] = None) -> str:
+        """
+        Plain-text completion with no JSON-schema constraint.
+
+        Thin wrapper around `_call` for callers (e.g. the K8s issue-body
+        generator) that just need an unstructured Markdown response.
+
+        Args:
+            prompt:     The full prompt to send.
+            max_tokens: Optional per-call override of self.max_tokens.
+                        Restored after the call.
+        """
+        if max_tokens is None:
+            return self._call(prompt)
+        original = self.max_tokens
+        try:
+            self.max_tokens = int(max_tokens)
+            return self._call(prompt)
+        finally:
+            self.max_tokens = original
+
     def summarize_health(self, health_data: dict, application: str) -> str:
         """Generate a brief health summary for status reporting."""
         prompt = f"""You are Nightwatch, an AI monitoring system. Summarize the health of {application}.
