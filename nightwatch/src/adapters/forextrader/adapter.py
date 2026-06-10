@@ -21,9 +21,10 @@ Auth:
 Author: Nova ⚡ | Nightwatch Platform
 """
 
-import logging
 from datetime import datetime, timezone
 from typing import Optional
+
+import structlog
 
 from src.adapters.base_adapter import BaseNightwatchAdapter, HealthCheck, CheckStatus, Component
 from src.adapters.forextrader.collectors import (
@@ -39,7 +40,7 @@ from src.adapters.forextrader.collectors import (
     collect_jenkins_build_status,
 )
 
-log = logging.getLogger("nightwatch.adapter.forextrader")
+log = structlog.get_logger("nightwatch.adapter.forextrader")
 
 
 # ─── Category Inference ───────────────────────────────────────────────────────
@@ -258,7 +259,7 @@ class ForexTraderAdapter(BaseNightwatchAdapter):
             return logs
 
         except Exception as e:
-            log.warning("log_collection_failed | error=str(e)")
+            log.warning("log_collection_failed", error=str(e))
             return []
 
     # ─── Health Checks ────────────────────────────────────────────────────────

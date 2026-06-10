@@ -194,20 +194,21 @@ class K8sEventWatcher:
         if self._initialized:
             return True
         try:
-            from kubernetes import client, config, watch  # type: ignore
+            from kubernetes import client, watch  # type: ignore
+            from src.k8s.client_config import load_k8s_config
         except ImportError as e:
             log.error("kubernetes_client_unavailable", error=str(e))
             return False
         try:
-            config.load_incluster_config()
-            log.info("k8s_in_cluster_config_loaded")
-        except Exception:  # noqa: BLE001
-            try:
-                config.load_kube_config()
-                log.info("k8s_kubeconfig_loaded")
-            except Exception as e:  # noqa: BLE001
-                log.error("k8s_config_load_failed", error=str(e))
-                return False
+            # load_k8s_config() loads in-cluster (or kubeconfig) config AND
+            # normalizes the in-cluster bearer token so requests are actually
+            # authenticated. Without this, certain kubernetes-client builds send
+            # requests as system:anonymous and the events watch 403s every 5s.
+            load_k8s_config()
+            log.info("k8s_config_loaded")
+        except Exception as e:  # noqa: BLE001
+            log.error("k8s_config_load_failed", error=str(e))
+            return False
         self._api = client.CoreV1Api()
         self._watch_cls = watch.Watch
         self._initialized = True

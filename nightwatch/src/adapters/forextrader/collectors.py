@@ -13,13 +13,19 @@ Collects:
 Author: Nova ⚡ | Nightwatch Platform
 """
 
-import logging
 from datetime import datetime, timezone
 from typing import Optional
 
 import httpx
+import structlog
 
-log = logging.getLogger("nightwatch.forextrader.collectors")
+from src.k8s.client_config import load_k8s_config
+
+# structlog (not stdlib logging): every call site below passes structured
+# keyword fields (namespace=, error=, job=, ...). stdlib logging.Logger rejects
+# those kwargs with "Logger._log() got an unexpected keyword argument 'namespace'",
+# which previously crashed the entire ForexTrader check cycle.
+log = structlog.get_logger("nightwatch.forextrader.collectors")
 
 
 # ─── Kubernetes ───────────────────────────────────────────────────────────────
@@ -38,15 +44,9 @@ def collect_k8s_pod_status(k8s_namespace: str, kubeconfig_path: Optional[str] = 
         }
     """
     try:
-        from kubernetes import client, config as k8s_config
+        from kubernetes import client
 
-        if kubeconfig_path:
-            k8s_config.load_kube_config(config_file=kubeconfig_path)
-        else:
-            try:
-                k8s_config.load_incluster_config()
-            except Exception:
-                k8s_config.load_kube_config()
+        load_k8s_config(kubeconfig_path)
 
         v1 = client.CoreV1Api()
         pods = v1.list_namespaced_pod(namespace=k8s_namespace)
@@ -97,15 +97,9 @@ def collect_k8s_all_deployments(k8s_namespace: str,
     Returns per-deployment ready/desired/restarts so we can build a full component map.
     """
     try:
-        from kubernetes import client, config as k8s_config
+        from kubernetes import client
 
-        if kubeconfig_path:
-            k8s_config.load_kube_config(config_file=kubeconfig_path)
-        else:
-            try:
-                k8s_config.load_incluster_config()
-            except Exception:
-                k8s_config.load_kube_config()
+        load_k8s_config(kubeconfig_path)
 
         apps_v1 = client.AppsV1Api()
         deploys = apps_v1.list_namespaced_deployment(namespace=k8s_namespace)
@@ -140,15 +134,9 @@ def collect_k8s_nodes(kubeconfig_path: Optional[str] = None) -> dict:
     Collect Kubernetes node health: Ready status, CPU/memory pressure, disk pressure.
     """
     try:
-        from kubernetes import client, config as k8s_config
+        from kubernetes import client
 
-        if kubeconfig_path:
-            k8s_config.load_kube_config(config_file=kubeconfig_path)
-        else:
-            try:
-                k8s_config.load_incluster_config()
-            except Exception:
-                k8s_config.load_kube_config()
+        load_k8s_config(kubeconfig_path)
 
         v1 = client.CoreV1Api()
         nodes = v1.list_node()
@@ -191,15 +179,9 @@ def collect_k8s_statefulsets(k8s_namespace: str, names: list[str],
     Collect StatefulSet health (databases, message brokers).
     """
     try:
-        from kubernetes import client, config as k8s_config
+        from kubernetes import client
 
-        if kubeconfig_path:
-            k8s_config.load_kube_config(config_file=kubeconfig_path)
-        else:
-            try:
-                k8s_config.load_incluster_config()
-            except Exception:
-                k8s_config.load_kube_config()
+        load_k8s_config(kubeconfig_path)
 
         apps_v1 = client.AppsV1Api()
         result = {}
@@ -248,15 +230,9 @@ def collect_k8s_namespace_summary(namespaces: list[str],
     Collect pod counts and failure summary for multiple namespaces.
     """
     try:
-        from kubernetes import client, config as k8s_config
+        from kubernetes import client
 
-        if kubeconfig_path:
-            k8s_config.load_kube_config(config_file=kubeconfig_path)
-        else:
-            try:
-                k8s_config.load_incluster_config()
-            except Exception:
-                k8s_config.load_kube_config()
+        load_k8s_config(kubeconfig_path)
 
         v1 = client.CoreV1Api()
         result = {}
@@ -287,15 +263,9 @@ def collect_k8s_deployment_status(k8s_namespace: str, deployments: list[str],
     Collect deployment health (desired vs available replicas).
     """
     try:
-        from kubernetes import client, config as k8s_config
+        from kubernetes import client
 
-        if kubeconfig_path:
-            k8s_config.load_kube_config(config_file=kubeconfig_path)
-        else:
-            try:
-                k8s_config.load_incluster_config()
-            except Exception:
-                k8s_config.load_kube_config()
+        load_k8s_config(kubeconfig_path)
 
         apps_v1 = client.AppsV1Api()
         result = {}
@@ -327,15 +297,9 @@ def collect_k8s_cnpg_clusters(namespace: str, names: list[str],
     Uses the custom objects API for postgresql.cnpg.io/v1/clusters.
     """
     try:
-        from kubernetes import client, config as k8s_config
+        from kubernetes import client
 
-        if kubeconfig_path:
-            k8s_config.load_kube_config(config_file=kubeconfig_path)
-        else:
-            try:
-                k8s_config.load_incluster_config()
-            except Exception:
-                k8s_config.load_kube_config()
+        load_k8s_config(kubeconfig_path)
 
         custom_api = client.CustomObjectsApi()
         try:
