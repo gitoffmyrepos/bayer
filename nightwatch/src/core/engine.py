@@ -178,6 +178,17 @@ class NightwatchEngine:
             config.get("nightwatch", {}).get("app_alert_dedup_window_seconds", 1800)
         )
 
+        # Sustained-failure tracker for remediation: a single transient degraded
+        # cycle (e.g. a healthy multi-replica deployment momentarily showing
+        # N-1/N ready while a probe flaps under load, or an HPA scale event) must
+        # NOT trigger a restart. We require the SAME resource to fail across this
+        # many consecutive check cycles before any restart-class remediation runs.
+        # Key: f"{issue_type}:{resource_name}" → consecutive-failure count.
+        self._remediation_failure_streak: dict[str, int] = {}
+        self._remediation_min_consecutive = int(
+            config.get("nightwatch", {}).get("remediation_min_consecutive_failures", 3)
+        )
+
     # ─── Main Loop ────────────────────────────────────────────────────────────
 
     async def start(self) -> None:
@@ -338,6 +349,23 @@ class NightwatchEngine:
             return None
 
         try:
+            # ── Sustained-failure gate ────────────────────────────────────────
+            # Update the consecutive-failure streak for every resource failing
+            # THIS cycle, and decay streaks for resources that recovered, so a
+            # transient one-cycle blip cannot trigger a restart. Only resources
+            # that have failed for >= remediation_min_consecutive cycles are
+            # eligible for restart-class (SAFE_AUTO_FIX) remediation below.
+            failing_keys_this_cycle: set[str] = set()
+            for check in failing:
+                k = f"{self._classify_issue_type(check)}:{self._extract_resource_name(check)}"
+                failing_keys_this_cycle.add(k)
+            for k in list(self._remediation_failure_streak.keys()):
+                if k not in failing_keys_this_cycle:
+                    # Resource recovered — reset its streak.
+                    del self._remediation_failure_streak[k]
+            for k in failing_keys_this_cycle:
+                self._remediation_failure_streak[k] = self._remediation_failure_streak.get(k, 0) + 1
+
             # Classify each failing check
             for check in failing:
                 issue_type = self._classify_issue_type(check)
@@ -346,6 +374,21 @@ class NightwatchEngine:
                 namespace = "prod-forex"
 
                 if issue_type in GitOpsRemediator.SAFE_AUTO_FIX:
+                    # Require sustained failure before any restart-class fix so a
+                    # healthy multi-replica service is never restarted on a
+                    # transient probe-flap / HPA-scale / single degraded sample.
+                    streak_key = f"{issue_type}:{resource_name}"
+                    streak = self._remediation_failure_streak.get(streak_key, 0)
+                    if streak < self._remediation_min_consecutive:
+                        log.info(
+                            "remediation_deferred_unsustained",
+                            resource=resource_name,
+                            issue_type=issue_type,
+                            streak=streak,
+                            required=self._remediation_min_consecutive,
+                        )
+                        continue
+
                     # Cluster/GitOps issue → auto-remediate
                     log.info(f"auto_remediating: {issue_type} on {resource_name}")
 
