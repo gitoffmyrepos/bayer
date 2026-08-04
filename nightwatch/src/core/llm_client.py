@@ -43,6 +43,29 @@ class NightwatchLLMClient:
     """
 
     PROVIDERS = ["openai", "anthropic", "deepseek", "ollama"]
+    DIAGNOSIS_SCHEMA = {
+        "type": "object",
+        "properties": {
+            "root_cause": {"type": "string"},
+            "severity": {
+                "type": "string",
+                "enum": ["critical", "high", "medium", "low"],
+            },
+            "recommendation": {"type": "string"},
+            "auto_fix_possible": {"type": "boolean"},
+            "auto_fix_command": {"type": ["string", "null"]},
+            "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+        },
+        "required": [
+            "root_cause",
+            "severity",
+            "recommendation",
+            "auto_fix_possible",
+            "auto_fix_command",
+            "confidence",
+        ],
+        "additionalProperties": False,
+    }
 
     # DeepSeek uses OpenAI-compatible API at this base URL
     DEEPSEEK_BASE_URL = "https://api.deepseek.com/v1"
@@ -148,7 +171,7 @@ Severity guide:
 - medium: Warning condition, investigate within 1 hour
 - low: Informational, no immediate action needed"""
 
-        response_text = self._call(prompt)
+        response_text = self._call(prompt, ollama_format=self.DIAGNOSIS_SCHEMA)
 
         try:
             # Extract JSON from response (LLMs sometimes wrap it in markdown)
@@ -239,14 +262,19 @@ Be specific about any issues found."""
 
     # ─── Provider Routing ────────────────────────────────────────────────────
 
-    def _call(self, prompt: str, retries: int = 2) -> str:
+    def _call(self, prompt: str, retries: int = 2, ollama_format: Optional[dict] = None) -> str:
         """Route to the configured provider. Retries on transient failures."""
         if self.provider != "ollama" and not self.api_key:
             raise LLMError(f"API key is not configured for provider '{self.provider}'")
         with self._request_lock:
-            return self._call_serialized(prompt, retries)
+            return self._call_serialized(prompt, retries, ollama_format)
 
-    def _call_serialized(self, prompt: str, retries: int) -> str:
+    def _call_serialized(
+        self,
+        prompt: str,
+        retries: int,
+        ollama_format: Optional[dict] = None,
+    ) -> str:
         """Execute one request at a time so Nightwatch cannot flood a provider."""
         last_error = None
         for attempt in range(retries + 1):
@@ -260,7 +288,7 @@ Be specific about any issues found."""
                 elif self.provider == "deepseek":
                     return self._call_openai(prompt, base_url=self.DEEPSEEK_BASE_URL)
                 elif self.provider == "ollama":
-                    return self._call_ollama(prompt)
+                    return self._call_ollama(prompt, response_format=ollama_format)
             except Exception as e:
                 last_error = e
                 if attempt < retries:
@@ -332,13 +360,12 @@ Be specific about any issues found."""
         )
         return response.choices[0].message.content
 
-    def _call_ollama(self, prompt: str) -> str:
+    def _call_ollama(self, prompt: str, response_format: Optional[dict] = None) -> str:
         """Call local Ollama instance."""
         base_url = self.base_url or "http://localhost:11434"
         url = f"{base_url}/api/generate"
 
-        with httpx.Client(timeout=self.timeout) as client:
-            response = client.post(url, json={
+        payload = {
                 "model": self.model,
                 "prompt": prompt,
                 "stream": False,
@@ -350,7 +377,12 @@ Be specific about any issues found."""
                     "temperature": self.temperature,
                     "num_predict": self.max_tokens,
                 },
-            })
+            }
+        if response_format is not None:
+            payload["format"] = response_format
+
+        with httpx.Client(timeout=self.timeout) as client:
+            response = client.post(url, json=payload)
             response.raise_for_status()
             return response.json()["response"]
 
