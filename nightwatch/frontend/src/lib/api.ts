@@ -71,6 +71,24 @@ type MetricsResponse = {
 };
 export type TriggerResponse = { triggered: boolean; adapter: string; message: string };
 type ReportResponse = { incident_id: string; report: string };
+export type LlmProvider = 'ollama' | 'openai' | 'anthropic' | 'deepseek';
+export type LlmSettings = {
+  provider: LlmProvider;
+  model: string;
+  base_url: string;
+  api_key_configured: boolean;
+  configured: boolean;
+  configured_providers: Record<LlmProvider, boolean>;
+  persistence_enabled: boolean;
+};
+export type LlmSettingsInput = {
+  provider: LlmProvider;
+  model: string;
+  base_url: string;
+  api_key?: string;
+  clear_api_key?: boolean;
+};
+type LlmTestResponse = { ok: boolean; provider: LlmProvider; model: string };
 
 export class NightwatchApiError extends Error {
   constructor(
@@ -140,13 +158,22 @@ export const nightwatchApi = {
 
   getSchedule: () => request<ScheduleResponse>('/schedule'),
 
-  generateReport: (incident_id: string, adapter?: string) =>
+  getLlmSettings: () => request<LlmSettings>('/llm/settings'),
+
+  testLlmSettings: (settings: LlmSettingsInput) =>
+    request<LlmTestResponse>('/llm/settings/test', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(settings),
+    }, 120000),
+
+  generateReport: (incident_id: string, adapter?: string, llm?: LlmSettingsInput) =>
     request<ReportResponse>(
       '/report',
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ incident_id, adapter }),
+        body: JSON.stringify({ incident_id, adapter, ...(llm ? { llm } : {}) }),
       },
       120000,
     ),

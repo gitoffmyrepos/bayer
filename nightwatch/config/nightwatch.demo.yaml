@@ -1,6 +1,9 @@
 # LocalStack boss demo: AWS-only, Ollama-backed, observe-only.
 nightwatch:
   check_interval_seconds: 30
+  ai_diagnosis_refresh_seconds: 3600
+  ai_diagnosis_min_interval_seconds: 900
+  ai_diagnosis_retry_seconds: 900
   max_incidents_history: 100
   enable_ai_diagnosis: true
   # The demo logs and displays findings; it does not send external alerts.
@@ -11,6 +14,7 @@ llm:
   model: qwen3:14b
   base_url: ${OLLAMA_BASE_URL}
   max_tokens: 2048
+  max_context_chars: 16000
   temperature: 0.1
   timeout_seconds: 30
 

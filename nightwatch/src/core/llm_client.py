@@ -13,6 +13,7 @@ Author: Nova ⚡ | Nightwatch Platform
 """
 
 import json
+import threading
 import time
 from typing import Optional
 
@@ -60,7 +61,9 @@ class NightwatchLLMClient:
         self.base_url = config.get("base_url", "")
         self.timeout = config.get("timeout_seconds", 60)
         self.max_tokens = config.get("max_tokens", 2048)
+        self.max_context_chars = int(config.get("max_context_chars", 24000))
         self.temperature = config.get("temperature", 0.1)
+        self._request_lock = threading.Lock()
 
         if self.provider not in self.PROVIDERS:
             raise ValueError(f"Unknown LLM provider: {self.provider}. Must be one of {self.PROVIDERS}")
@@ -112,7 +115,7 @@ Respond with a clear, actionable analysis. Be concise — max 3 paragraphs."""
                 "confidence": float  # 0.0–1.0
             }
         """
-        metrics_str = json.dumps(metrics, indent=2, default=str)
+        metrics_str = self._bounded_text(json.dumps(metrics, indent=2, default=str), "metrics")
         logs_str = "\n".join(logs[-50:]) if logs else "No logs available"
 
         prompt = f"""You are Nightwatch, an AI monitoring system performing root cause analysis.
@@ -151,24 +154,21 @@ Severity guide:
             # Extract JSON from response (LLMs sometimes wrap it in markdown)
             json_match = self._extract_json(response_text)
             result = json.loads(json_match)
-            # Validate expected fields
-            result.setdefault("root_cause", "Unable to determine root cause")
-            result.setdefault("severity", "medium")
-            result.setdefault("recommendation", "Manual investigation required")
-            result.setdefault("auto_fix_possible", False)
-            result.setdefault("auto_fix_command", None)
-            result.setdefault("confidence", 0.5)
+            required = {
+                "root_cause",
+                "severity",
+                "recommendation",
+                "auto_fix_possible",
+                "auto_fix_command",
+                "confidence",
+            }
+            missing = required.difference(result)
+            if missing:
+                raise ValueError(f"LLM response omitted required fields: {sorted(missing)}")
             return result
         except (json.JSONDecodeError, ValueError) as e:
             log.warning("llm_json_parse_failed", error=str(e), raw_response=response_text[:200])
-            return {
-                "root_cause": response_text[:500],
-                "severity": "medium",
-                "recommendation": "Review the analysis above and investigate manually.",
-                "auto_fix_possible": False,
-                "auto_fix_command": None,
-                "confidence": 0.3,
-            }
+            raise LLMError("LLM returned an invalid diagnosis document") from e
 
     def generate_incident_report(self, incident: dict) -> str:
         """
@@ -190,7 +190,7 @@ Severity guide:
         prompt = f"""You are Nightwatch, an AI monitoring system. Generate a professional incident report.
 
 INCIDENT DATA:
-{json.dumps(incident, indent=2, default=str)}
+{self._bounded_text(json.dumps(incident, indent=2, default=str), "incident")}
 
 Write a clear, concise incident report with these sections:
 1. **Executive Summary** (2-3 sentences: what happened, impact, status)
@@ -241,6 +241,13 @@ Be specific about any issues found."""
 
     def _call(self, prompt: str, retries: int = 2) -> str:
         """Route to the configured provider. Retries on transient failures."""
+        if self.provider != "ollama" and not self.api_key:
+            raise LLMError(f"API key is not configured for provider '{self.provider}'")
+        with self._request_lock:
+            return self._call_serialized(prompt, retries)
+
+    def _call_serialized(self, prompt: str, retries: int) -> str:
+        """Execute one request at a time so Nightwatch cannot flood a provider."""
         last_error = None
         for attempt in range(retries + 1):
             try:
@@ -262,6 +269,40 @@ Be specific about any issues found."""
                     time.sleep(wait)
 
         raise LLMError(f"LLM call failed after {retries + 1} attempts: {last_error}")
+
+    def test_connection(self) -> None:
+        """Validate provider credentials, endpoint reachability, and model access."""
+        if self.provider != "ollama" and not self.api_key:
+            raise LLMError(f"API key is not configured for provider '{self.provider}'")
+        try:
+            if self.provider == "ollama":
+                base_url = (self.base_url or "").rstrip("/")
+                with httpx.Client(timeout=self.timeout) as client:
+                    response = client.get(f"{base_url}/api/tags")
+                    response.raise_for_status()
+                    models = response.json().get("models", [])
+                available = {item.get("name") for item in models if isinstance(item, dict)}
+                if self.model not in available:
+                    raise LLMError(f"Configured Ollama model '{self.model}' is not installed")
+                return
+            if self.provider in {"openai", "deepseek"}:
+                from openai import OpenAI
+                base_url = self.base_url or (
+                    self.DEEPSEEK_BASE_URL if self.provider == "deepseek" else "https://api.openai.com/v1"
+                )
+                OpenAI(api_key=self.api_key, base_url=base_url).models.retrieve(self.model)
+                return
+            if self.provider == "anthropic":
+                import anthropic
+                kwargs = {"api_key": self.api_key}
+                if self.base_url:
+                    kwargs["base_url"] = self.base_url
+                anthropic.Anthropic(**kwargs).models.retrieve(self.model)
+                return
+        except LLMError:
+            raise
+        except Exception as exc:
+            raise LLMError(f"Provider connection test failed: {exc}") from exc
 
     def _call_anthropic(self, prompt: str) -> str:
         """Call Anthropic Claude API (or any Anthropic-compatible endpoint, e.g. MiniMax)."""
@@ -326,3 +367,10 @@ Be specific about any issues found."""
             return json_bare.group(0)
 
         return text  # Let the caller deal with parse failure
+
+    def _bounded_text(self, text: str, label: str) -> str:
+        """Bound observed evidence so one incident cannot monopolize the provider queue."""
+        if len(text) <= self.max_context_chars:
+            return text
+        omitted = len(text) - self.max_context_chars
+        return f"{text[:self.max_context_chars]}\n[{label} evidence truncated; {omitted} characters omitted]"

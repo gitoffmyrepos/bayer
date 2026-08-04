@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
 import {
   AlertTriangle,
   BrainCircuit,
@@ -20,7 +21,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
-import { useGenerateReport, useIncidents } from '@/hooks/useNightwatch';
+import { useGenerateReport, useIncidents, useLlmSettings, useSessionLlm } from '@/hooks/useNightwatch';
 import { cn } from '@/lib/utils';
 
 function severityStyle(severity: string) {
@@ -40,9 +41,13 @@ function severityStyle(severity: string) {
 export default function AiAnalystPage() {
   const [selectedId, setSelectedId] = useState('');
   const incidentsQuery = useIncidents({ limit: 100 });
+  const llmSettingsQuery = useLlmSettings();
+  const sessionLlmQuery = useSessionLlm();
   const reportMutation = useGenerateReport();
   const incidents = incidentsQuery.data?.incidents ?? [];
   const selected = incidents.find((incident) => incident.id === selectedId);
+  const sessionLlm = sessionLlmQuery.data ?? undefined;
+  const llmConfigured = Boolean(sessionLlm || llmSettingsQuery.data?.configured);
 
   function selectIncident(value: string | null) {
     setSelectedId(value ?? '');
@@ -51,7 +56,7 @@ export default function AiAnalystPage() {
 
   function generateReport() {
     if (!selected) return;
-    reportMutation.mutate({ incident_id: selected.id });
+    reportMutation.mutate({ incident_id: selected.id, llm: sessionLlm });
   }
 
   return (
@@ -157,7 +162,7 @@ export default function AiAnalystPage() {
 
               <Button
                 onClick={generateReport}
-                disabled={!selected || reportMutation.isPending}
+                disabled={!selected || reportMutation.isPending || !llmConfigured}
                 className="h-10 w-full bg-cyan-500 text-black hover:bg-cyan-400"
               >
                 {reportMutation.isPending ? (
@@ -167,6 +172,15 @@ export default function AiAnalystPage() {
                 )}
                 Analyze with Nightwatch LLM
               </Button>
+              {!llmConfigured && !llmSettingsQuery.isLoading && (
+                <p className="text-center text-xs text-amber-400">
+                  An LLM provider is required.{' '}
+                  <Link href="/settings" className="underline underline-offset-2 hover:text-amber-300">
+                    Add Ollama or an API key
+                  </Link>
+                  .
+                </p>
+              )}
             </CardContent>
           </Card>
 
@@ -177,7 +191,11 @@ export default function AiAnalystPage() {
                 Analyst report
               </CardTitle>
               <p className="text-xs text-zinc-600">
-                Ollama is used when configured by the Nightwatch API; generation failures are shown below.
+                {sessionLlm
+                  ? `${sessionLlm.provider} · ${sessionLlm.model} · this browser tab`
+                  : llmSettingsQuery.data?.configured
+                    ? `${llmSettingsQuery.data.provider} · ${llmSettingsQuery.data.model} · deployment default`
+                  : 'Configure Ollama, OpenAI, Anthropic, or DeepSeek in Settings.'}
               </p>
             </CardHeader>
             <CardContent className="p-5">
@@ -196,7 +214,11 @@ export default function AiAnalystPage() {
                         {reportMutation.error.message}
                       </p>
                       <p className="mt-2 text-xs text-zinc-600">
-                        Confirm the API LLM configuration and Ollama reachability, then retry.
+                        Retry shortly or{' '}
+                        <Link href="/settings" className="text-cyan-400 underline underline-offset-2">
+                          test or change the LLM provider
+                        </Link>
+                        .
                       </p>
                     </div>
                   </div>

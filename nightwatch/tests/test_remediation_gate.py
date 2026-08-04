@@ -10,7 +10,11 @@ from src.adapters.base_adapter import (
 from src.core.config import NightwatchConfig
 from src.core.engine import NightwatchEngine
 from src.core.remediation_gate import remediation_enabled
-from src.api.main import generate_report
+from fastapi import HTTPException
+
+from src.api.main import _build_request_llm, generate_report
+from src.core.llm_client import LLMError
+from src.core.llm_settings import LLMSettingsStore
 
 
 def test_remediation_is_disabled_by_default(monkeypatch):
@@ -101,6 +105,48 @@ async def test_unknown_collection_check_never_produces_healthy_cycle(monkeypatch
 
 
 @pytest.mark.asyncio
+async def test_unchanged_findings_reuse_ai_diagnosis(monkeypatch):
+    monkeypatch.delenv("REMEDIATION_ENABLED", raising=False)
+
+    class CountingLLM:
+        model = "configured-model"
+
+        def __init__(self):
+            self.calls = 0
+
+        def diagnose(self, **_kwargs):
+            self.calls += 1
+            return {
+                "root_cause": "observed API collection failure",
+                "severity": "high",
+                "recommendation": "inspect the reported API error",
+                "auto_fix_possible": False,
+                "auto_fix_command": None,
+                "confidence": 0.9,
+            }
+
+    llm = CountingLLM()
+    engine = NightwatchEngine(
+        adapter=_UnknownAdapter({}),
+        llm_client=llm,
+        config={
+            "nightwatch": {
+                "enable_ai_diagnosis": True,
+                "ai_diagnosis_refresh_seconds": 3600,
+            },
+            "healing": {"mode": "observe_only"},
+            "alerting": {},
+        },
+    )
+
+    first = await engine.run_check_cycle()
+    second = await engine.run_check_cycle()
+
+    assert llm.calls == 1
+    assert first["active_incident"]["diagnosis"] == second["active_incident"]["diagnosis"]
+
+
+@pytest.mark.asyncio
 async def test_report_accepts_adapter_application_name():
     class ReportEngine:
         adapter = SimpleNamespace(application_name="AWS Infrastructure Estate")
@@ -130,3 +176,57 @@ async def test_report_accepts_adapter_application_name():
         "incident_id": "incident-1",
         "report": "report for incident-1",
     }
+
+
+def test_request_scoped_provider_rejects_arbitrary_ollama_endpoint():
+    request = SimpleNamespace(
+        app=SimpleNamespace(
+            state=SimpleNamespace(
+                llm_settings=LLMSettingsStore({
+                    "provider": "ollama",
+                    "model": "installed-model",
+                    "base_url": "http://ollama:11434",
+                })
+            )
+        )
+    )
+
+    with pytest.raises(HTTPException) as exc:
+        _build_request_llm(request, {
+            "provider": "ollama",
+            "model": "installed-model",
+            "base_url": "http://cluster-service.private",
+        })
+
+    assert exc.value.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_report_maps_provider_failure_to_service_unavailable():
+    class ReportEngine:
+        adapter = SimpleNamespace(application_name="Kubernetes")
+
+        def get_incidents(self, limit=100):
+            return [{"id": "incident-1", "title": "capacity mismatch"}]
+
+    class UnavailableLLM:
+        provider = "ollama"
+        model = "installed-model"
+
+        def generate_incident_report(self, _incident):
+            raise LLMError("provider queue full")
+
+    request = SimpleNamespace(
+        app=SimpleNamespace(
+            state=SimpleNamespace(
+                engines={"kubernetes": ReportEngine()},
+                llm_client=UnavailableLLM(),
+            )
+        )
+    )
+
+    with pytest.raises(HTTPException) as exc:
+        await generate_report(request, {"incident_id": "incident-1"})
+
+    assert exc.value.status_code == 503
+    assert "configure another provider" in exc.value.detail

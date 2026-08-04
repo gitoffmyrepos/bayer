@@ -749,8 +749,10 @@ curl -fsS 'http://localhost:8080/incidents?adapter=checkout-production'
    code and thresholds.
 3. WARN/FAIL checks create or update incidents through the engine's deduplication
    lifecycle.
-4. The evidence and architecture description may be passed to Ollama for a root
-   cause explanation and operator recommendation.
+4. The evidence and architecture description may be passed to the configured
+   Ollama, OpenAI, Anthropic, or DeepSeek provider for a root-cause explanation
+   and operator recommendation. Unchanged findings reuse their last successful
+   diagnosis so scheduled checks cannot flood the provider queue.
 5. Configured alert channels receive eligible severities. An alerting failure does
    not turn the underlying finding healthy.
 6. With remediation disabled, recommendations remain text. No suggested command is
@@ -770,7 +772,24 @@ See [docs/ADAPTER_GUIDE.md](docs/ADAPTER_GUIDE.md) and
 | `GET` | `/incidents` | Query incidents; supports adapter and active filters |
 | `GET` | `/metrics` | Current collected metrics snapshot |
 | `GET` | `/schedule` | Monitor-loop scheduling state |
-| `POST` | `/report` | Generate an Ollama report for an existing incident ID |
+| `POST` | `/report` | Generate an LLM report for an existing incident ID |
+| `GET` | `/llm/settings` | Read active provider metadata; credential values are never returned |
+| `POST` | `/llm/settings/test` | Test a request-scoped provider, credential, and model |
+
+### Selecting an LLM provider
+
+Open **Settings → LLM configuration** in the console. The deployment-configured
+Ollama instance is available without a user key. To use OpenAI, Anthropic, or
+DeepSeek, enter the exact provider model ID and your own API key, test the
+connection, and select **Use for this tab**. The browser sends that configuration
+only with your test and report requests. The key is held in browser session
+storage, is not written by the Nightwatch API, is not logged, and is cleared when
+the browser tab closes.
+
+The hosted console accepts official cloud-provider endpoints only. Ollama requests
+are constrained to the endpoint configured by the Nightwatch operator. This
+prevents a public visitor from turning the report API into an arbitrary internal
+HTTP client. A self-hosted operator changes the Ollama URL in `llm.base_url`.
 
 The API does not currently provide authentication itself. Put it behind the same
 kgateway/OIDC policy as the UI or another trusted identity-aware proxy. Do not
@@ -840,8 +859,12 @@ docker compose -f docker-compose.demo.yml exec nightwatch-api \
 ```
 
 Ensure the configured model exists and the URL is reachable from the API container.
-Deterministic findings remain valid while Ollama is offline; Nightwatch should show
-the analysis failure explicitly.
+If the provider returns `maximum pending requests exceeded`, inspect whether
+unchanged scheduled findings are being re-analyzed and confirm
+`ai_diagnosis_refresh_seconds` and `ai_diagnosis_retry_seconds` are configured.
+Nightwatch returns HTTP 503 for temporary provider failure instead of hiding it as
+an internal server error. Deterministic findings remain valid while the LLM is
+offline.
 
 ### UI cannot reach the API
 

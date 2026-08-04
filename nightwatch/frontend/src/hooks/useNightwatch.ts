@@ -1,7 +1,8 @@
 'use client';
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { nightwatchApi } from '@/lib/api';
+import { nightwatchApi, type LlmSettingsInput } from '@/lib/api';
+import { readLlmSession } from '@/lib/llm-session';
 
 export const useHealth = () =>
   useQuery({
@@ -42,6 +43,22 @@ export const useSchedule = () =>
     refetchInterval: 30000,
   });
 
+export const useLlmSettings = () =>
+  useQuery({
+    queryKey: ['llm-settings'],
+    queryFn: nightwatchApi.getLlmSettings,
+  });
+
+export const useSessionLlm = () =>
+  useQuery({
+    queryKey: ['llm-session'],
+    queryFn: async () => readLlmSession() ?? null,
+    staleTime: Number.POSITIVE_INFINITY,
+  });
+
+export const useTestLlmSettings = () =>
+  useMutation({ mutationFn: (settings: LlmSettingsInput) => nightwatchApi.testLlmSettings(settings) });
+
 export const useTriggerCheck = () => {
   const queryClient = useQueryClient();
   return useMutation({
@@ -57,6 +74,6 @@ export const useTriggerCheck = () => {
 
 export const useGenerateReport = () =>
   useMutation({
-    mutationFn: ({ incident_id, adapter }: { incident_id: string; adapter?: string }) =>
-      nightwatchApi.generateReport(incident_id, adapter),
+    mutationFn: ({ incident_id, adapter, llm }: { incident_id: string; adapter?: string; llm?: LlmSettingsInput }) =>
+      nightwatchApi.generateReport(incident_id, adapter, llm),
   });

@@ -16,6 +16,8 @@ Author: Nova ⚡ | Nightwatch Platform
 
 import asyncio
 import hashlib
+import json
+import time
 from collections import deque
 from datetime import datetime, timezone
 from typing import Optional
@@ -148,6 +150,15 @@ class NightwatchEngine:
             config.get("nightwatch", {}).get("alert_severities", ["critical", "high"])
         )
         self.enable_ai_diagnosis = config.get("nightwatch", {}).get("enable_ai_diagnosis", True)
+        self._ai_diagnosis_refresh_seconds = int(
+            config.get("nightwatch", {}).get("ai_diagnosis_refresh_seconds", 3600)
+        )
+        self._ai_diagnosis_min_interval_seconds = int(
+            config.get("nightwatch", {}).get("ai_diagnosis_min_interval_seconds", 900)
+        )
+        self._ai_diagnosis_retry_seconds = int(
+            config.get("nightwatch", {}).get("ai_diagnosis_retry_seconds", 900)
+        )
 
         # Auto-remediation (if available and configured)
         self._remediator = None
@@ -183,6 +194,9 @@ class NightwatchEngine:
         self._is_running = False
         self._check_count = 0
         self._consecutive_failures = 0
+        self._last_ai_signature = ""
+        self._last_ai_attempt = 0.0
+        self._last_ai_diagnosis: dict = {}
 
         # Dedup map for code-analyzer / remediation Discord alerts.
         # Key: f"{namespace}/{pod}/{error_signature}" → last_sent_epoch_seconds
@@ -341,6 +355,45 @@ class NightwatchEngine:
             f"- {c.name}: {c.status.value} — {c.message}"
             for c in failing
         )
+        signature_payload = [
+            {
+                "name": check.name,
+                "status": check.status.value,
+                "message": check.message,
+                "component": check.component,
+            }
+            for check in failing
+        ]
+        signature = hashlib.sha256(
+            json.dumps(signature_payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        ).hexdigest()
+        now = time.monotonic()
+        elapsed = now - self._last_ai_attempt
+        if self._last_ai_attempt and elapsed < self._ai_diagnosis_min_interval_seconds:
+            log.info(
+                "ai_diagnosis_rate_limited",
+                application=self.adapter.application_name,
+                cached=bool(self._last_ai_diagnosis),
+                retry_after_seconds=max(0, int(self._ai_diagnosis_min_interval_seconds - elapsed)),
+            )
+            return dict(self._last_ai_diagnosis)
+        if signature == self._last_ai_signature:
+            wait_seconds = (
+                self._ai_diagnosis_refresh_seconds
+                if self._last_ai_diagnosis
+                else self._ai_diagnosis_retry_seconds
+            )
+            if elapsed < wait_seconds:
+                log.info(
+                    "ai_diagnosis_reused",
+                    application=self.adapter.application_name,
+                    cached=bool(self._last_ai_diagnosis),
+                    retry_after_seconds=max(0, int(wait_seconds - elapsed)),
+                )
+                return dict(self._last_ai_diagnosis)
+
+        self._last_ai_signature = signature
+        self._last_ai_attempt = now
         try:
             diagnosis = await asyncio.get_event_loop().run_in_executor(
                 None,
@@ -351,17 +404,20 @@ class NightwatchEngine:
                     architecture=self.adapter.describe_architecture(),
                 ),
             )
+            self._last_ai_diagnosis = dict(diagnosis)
             log.info("ai_diagnosis_complete", severity=diagnosis.get("severity"), confidence=diagnosis.get("confidence"))
             return diagnosis
         except LLMError as e:
             log.warning("ai_diagnosis_failed", error=str(e))
-            return {
-                "root_cause": "AI diagnosis unavailable",
-                "severity": "unknown",
-                "recommendation": f"Investigate failing checks: {error_summary}",
-                "auto_fix_possible": False,
-                "confidence": 0.0,
-            }
+            self._last_ai_diagnosis = {}
+            return {}
+
+    def set_llm_client(self, llm_client: NightwatchLLMClient) -> None:
+        """Switch analysis providers and invalidate provider-specific cached output."""
+        self.llm = llm_client
+        self._last_ai_signature = ""
+        self._last_ai_attempt = 0.0
+        self._last_ai_diagnosis = {}
 
     # ─── Auto-Remediation ────────────────────────────────────────────────────
 

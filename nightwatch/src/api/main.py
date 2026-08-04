@@ -27,11 +27,13 @@ import uvicorn
 from fastapi import BackgroundTasks, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, RedirectResponse
+from pydantic import BaseModel, Field, ValidationError
 
 from src.api.routes import router
 from src.core.config import NightwatchConfig
 from src.core.engine import NightwatchEngine
-from src.core.llm_client import NightwatchLLMClient
+from src.core.llm_client import LLMError, NightwatchLLMClient
+from src.core.llm_settings import LLMSettingsError, LLMSettingsStore
 from src.core.remediation_gate import remediation_enabled
 from src.core.scheduler import NightwatchScheduler
 from src.k8s.dedup_store import DedupStore
@@ -55,6 +57,14 @@ structlog.configure(
 )
 
 log = structlog.get_logger("nightwatch")
+
+
+class LLMSettingsRequest(BaseModel):
+    provider: str = Field(min_length=1, max_length=32)
+    model: str = Field(min_length=1, max_length=256)
+    base_url: str = Field(default="", max_length=2048)
+    api_key: Optional[str] = Field(default=None, max_length=8192)
+    clear_api_key: bool = False
 
 # ─── Adapter Registry ────────────────────────────────────────────────────────
 # Map adapter type names → adapter classes
@@ -139,6 +149,8 @@ async def lifespan(app: FastAPI):
     app.state.engines = {}
     app.state.scheduler = NightwatchScheduler()
     app.state.llm_client = None
+    app.state.llm_settings = None
+    app.state.report_semaphore = asyncio.Semaphore(1)
 
     # Load config
     config_path = os.environ.get("NIGHTWATCH_CONFIG", "config/nightwatch.yaml")
@@ -155,11 +167,14 @@ async def lifespan(app: FastAPI):
                     hint="Using defaults. Set NIGHTWATCH_CONFIG env var or create config/nightwatch.yaml")
         config = NightwatchConfig({"nightwatch": {}, "llm": {}, "adapters": [], "alerting": {}})
 
-    # Initialize LLM client (monitoring / diagnosis)
+    # Initialize runtime LLM settings and client (monitoring / diagnosis).
+    # Credential values are never included in API responses or logs.
     try:
-        llm_client = NightwatchLLMClient(config.llm)
+        settings_store = LLMSettingsStore(config.llm)
+        app.state.llm_settings = settings_store
+        llm_client = NightwatchLLMClient(settings_store.client_config())
         app.state.llm_client = llm_client
-        log.info("llm_initialized", provider=config.llm_provider, model=llm_client.model)
+        log.info("llm_initialized", provider=llm_client.provider, model=llm_client.model)
     except Exception as e:
         log.warning("llm_init_failed", error=str(e),
                     hint="Monitoring will run without AI analysis")
@@ -494,12 +509,105 @@ async def generate_report(request: Request, body: dict):
             if incident.get("id") != incident_id:
                 continue
             llm = request.app.state.llm_client
+            if body.get("llm") is not None:
+                llm = _build_request_llm(request, body["llm"])
             if llm is None:
                 raise HTTPException(status_code=503, detail="LLM not configured")
-            report = await asyncio.to_thread(llm.generate_incident_report, incident)
+            try:
+                semaphore = getattr(request.app.state, "report_semaphore", None)
+                if semaphore is None:
+                    report = await asyncio.to_thread(llm.generate_incident_report, incident)
+                else:
+                    async with semaphore:
+                        report = await asyncio.to_thread(llm.generate_incident_report, incident)
+            except LLMError as exc:
+                log.warning(
+                    "report_llm_unavailable",
+                    provider=llm.provider,
+                    model=llm.model,
+                    error=str(exc),
+                )
+                raise HTTPException(
+                    status_code=503,
+                    detail=(
+                        "Configured LLM is temporarily unavailable. Retry shortly or configure "
+                        "another provider in Settings."
+                    ),
+                ) from exc
             return {"incident_id": incident_id, "report": report}
 
     raise HTTPException(status_code=404, detail=f"Incident '{incident_id}' not found")
+
+
+@app.get("/llm/settings")
+async def get_llm_settings(request: Request):
+    """Return non-secret metadata for the active analysis provider."""
+    store = request.app.state.llm_settings
+    if store is None:
+        raise HTTPException(status_code=503, detail="LLM settings are unavailable")
+    return store.public_settings()
+
+
+def _build_request_llm(request: Request, submitted: dict) -> NightwatchLLMClient:
+    """Build a request-scoped client without persisting or logging credentials."""
+    store = request.app.state.llm_settings
+    if store is None:
+        raise HTTPException(status_code=503, detail="LLM settings are unavailable")
+    try:
+        body = LLMSettingsRequest.model_validate(submitted)
+    except ValidationError as exc:
+        raise HTTPException(status_code=422, detail="Invalid LLM provider settings") from exc
+
+    active = store.client_config()
+    if body.provider == "ollama":
+        requested_url = body.base_url.strip().rstrip("/")
+        active_url = str(active.get("base_url") or "").rstrip("/")
+        if requested_url and requested_url != active_url:
+            raise HTTPException(
+                status_code=422,
+                detail="This deployment only permits its configured Ollama endpoint",
+            )
+        config = dict(active)
+        config.update({"provider": "ollama", "model": body.model, "base_url": active_url, "api_key": ""})
+        return NightwatchLLMClient(config)
+
+    if body.base_url.strip():
+        raise HTTPException(
+            status_code=422,
+            detail="Custom cloud-provider endpoints are disabled on the hosted console",
+        )
+    if not body.api_key or not body.api_key.strip():
+        raise HTTPException(
+            status_code=422,
+            detail=f"Enter your own {body.provider} API key for this browser session",
+        )
+    try:
+        config = store.candidate_config(
+            provider=body.provider,
+            model=body.model,
+            base_url="",
+            api_key=body.api_key,
+        )
+    except LLMSettingsError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return NightwatchLLMClient(config)
+
+
+@app.post("/llm/settings/test")
+async def test_llm_settings(request: Request, body: LLMSettingsRequest):
+    """Test credentials and model access without saving or returning the key."""
+    store = request.app.state.llm_settings
+    if store is None:
+        raise HTTPException(status_code=503, detail="LLM settings are unavailable")
+    try:
+        client = _build_request_llm(request, body.model_dump())
+        await asyncio.to_thread(client.test_connection)
+    except LLMSettingsError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except LLMError as exc:
+        log.warning("llm_connection_test_failed", provider=body.provider, error=str(exc))
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    return {"ok": True, "provider": client.provider, "model": client.model}
 
 
 @app.get("/schedule")

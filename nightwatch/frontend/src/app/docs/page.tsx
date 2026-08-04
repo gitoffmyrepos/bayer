@@ -78,6 +78,8 @@ export default function DocsPage() {
           <Endpoint method="GET" path="/metrics?adapter=name" description="Latest collected metrics as JSON; adapter is optional" />
           <Endpoint method="GET" path="/schedule" description="Scheduler intervals, run counts, errors, and running state" />
           <Endpoint method="POST" path="/report" description="Generate an LLM report for an existing incident (JSON body: incident_id, optional adapter)" />
+          <Endpoint method="GET" path="/llm/settings" description="Read active provider metadata without credential values" />
+          <Endpoint method="POST" path="/llm/settings/test" description="Test a request-scoped provider key and model without persisting it" />
         </CardContent>
       </Card>
 
