@@ -1,0 +1,10 @@
+.git
+.pytest_cache
+.superpowers
+**/__pycache__
+**/*.py[cod]
+frontend
+localstack
+tests
+docker-compose*.yml
+*.md

@@ -1,227 +1,161 @@
 'use client';
 
 import { useState } from 'react';
-import { Zap, CheckCircle2, XCircle, Minus, Loader2, RefreshCw } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { AlertTriangle, CheckCircle2, Clock3, Loader2, RefreshCw, Zap } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Progress } from '@/components/ui/progress';
 import { useAdapters, useTriggerCheck } from '@/hooks/useNightwatch';
-import { cn } from '@/lib/utils';
+import type { NightwatchAdapter, TriggerResponse } from '@/lib/api';
 
-function statusBg(status: string) {
-  switch (status?.toLowerCase()) {
-    case 'healthy': return 'bg-green-500/10 text-green-400 border-green-500/20';
-    case 'degraded': return 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20';
-    case 'unhealthy': return 'bg-red-500/10 text-red-400 border-red-500/20';
-    default: return 'bg-zinc-500/10 text-zinc-400 border-zinc-500/20';
-  }
-}
-
-function StatusIcon({ status }: { status: string }) {
-  if (status === 'healthy') return <CheckCircle2 className="w-4 h-4 text-green-400" />;
-  if (status === 'degraded') return <Minus className="w-4 h-4 text-yellow-400" />;
-  return <XCircle className="w-4 h-4 text-red-400" />;
-}
-
-type CheckResult = {
-  triggered: boolean;
-  adapter: string;
-  message: string;
-};
+type AcceptedRequest = { acceptedAt: Date; response: TriggerResponse };
 
 export default function LiveCheckPage() {
-  const [selectedAdapter, setSelectedAdapter] = useState<string>('all');
-  const [progress, setProgress] = useState(0);
-  const [result, setResult] = useState<CheckResult | null>(null);
-  const [checkHistory, setCheckHistory] = useState<Array<{ time: Date; result: CheckResult }>>([]);
-
-  const { data: adapters } = useAdapters();
-  const { mutate: triggerCheck, isPending } = useTriggerCheck();
-
-  const adapterNames: string[] = adapters?.adapters?.map((a: { name: string }) => a.name) ?? [];
+  const [selectedAdapter, setSelectedAdapter] = useState('all');
+  const [result, setResult] = useState<TriggerResponse | null>(null);
+  const [acceptedRequests, setAcceptedRequests] = useState<AcceptedRequest[]>([]);
+  const adaptersQuery = useAdapters();
+  const triggerMutation = useTriggerCheck();
+  const adapterNames = (adaptersQuery.data?.adapters ?? []).map(
+    (adapter: NightwatchAdapter) => adapter.name
+  );
 
   function runCheck() {
     setResult(null);
-    setProgress(0);
-
-    // Simulate progress
-    const interval = setInterval(() => {
-      setProgress(p => {
-        if (p >= 90) { clearInterval(interval); return p; }
-        return p + Math.random() * 15;
-      });
-    }, 200);
-
-    triggerCheck(
-      selectedAdapter === 'all' ? undefined : selectedAdapter,
-      {
-        onSuccess: (data: CheckResult) => {
-          clearInterval(interval);
-          setProgress(100);
-          setResult(data);
-          setCheckHistory(h => [{ time: new Date(), result: data }, ...h].slice(0, 10));
-        },
-        onError: () => {
-          clearInterval(interval);
-          setProgress(0);
-        },
-      }
-    );
+    triggerMutation.reset();
+    triggerMutation.mutate(selectedAdapter === 'all' ? undefined : selectedAdapter, {
+      onSuccess: (response) => {
+        setResult(response);
+        setAcceptedRequests((requests) => [
+          { acceptedAt: new Date(), response },
+          ...requests,
+        ].slice(0, 10));
+      },
+    });
   }
 
-  const currentAdapterData = adapters?.adapters?.find(
-    (a: { name: string }) => a.name === (result?.adapter === 'all' ? adapterNames[0] : result?.adapter)
-  );
-
   return (
-    <div className="p-6 lg:pt-6 pt-16 space-y-6">
+    <div className="space-y-6 p-6 pt-16 lg:pt-6">
       <div>
         <h1 className="text-xl font-bold text-white">Live Check</h1>
-        <p className="text-sm text-zinc-500">Trigger an immediate monitoring check on any adapter</p>
+        <p className="text-sm text-zinc-500">
+          Ask Nightwatch to start an asynchronous monitoring cycle for one adapter or all adapters.
+        </p>
       </div>
 
-      {/* Controls */}
-      <Card className="bg-zinc-950 border-zinc-800">
+      <Card className="border-zinc-800 bg-zinc-950">
         <CardContent className="p-6">
-          <div className="flex flex-wrap items-center gap-4">
-            <div>
-              <p className="text-xs text-zinc-500 mb-2 uppercase tracking-wider">Target Adapter</p>
-              <Select value={selectedAdapter} onValueChange={(v) => setSelectedAdapter(v ?? 'all')}>
-                <SelectTrigger className="w-[200px] bg-zinc-900 border-zinc-700 text-zinc-200">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent className="bg-zinc-950 border-zinc-700">
-                  <SelectItem value="all">All Adapters</SelectItem>
-                  {adapterNames.map((name) => (
-                    <SelectItem key={name} value={name}>{name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="flex-1" />
-
-            <Button
-              onClick={runCheck}
-              disabled={isPending}
-              size="lg"
-            className="bg-red-600 hover:bg-red-700 text-white font-semibold px-8 gap-2"
-            >
-              {isPending ? (
-                <>
-                  <Loader2 className="w-5 h-5 animate-spin" />
-                  Running Check…
-                </>
-              ) : (
-                <>
-                  <Zap className="w-5 h-5" />
-                  Run Check Now
-                </>
-              )}
-            </Button>
-          </div>
-
-          {isPending && (
-            <div className="mt-4 space-y-2">
-              <div className="flex items-center justify-between text-xs text-zinc-500">
-                <span>Checking components…</span>
-                <span>{Math.round(progress)}%</span>
+          {adaptersQuery.isError ? (
+            <div className="flex items-start gap-3 rounded-lg border border-red-900/50 bg-red-950/20 p-4">
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-red-400" />
+              <div>
+                <p className="text-sm font-medium text-red-300">Adapter list unavailable</p>
+                <p className="mt-1 text-xs text-zinc-500">{adaptersQuery.error.message}</p>
               </div>
-              <Progress value={progress} className="h-2 bg-zinc-800" />
+            </div>
+          ) : (
+            <div className="flex flex-wrap items-end gap-4">
+              <div>
+                <p className="mb-2 text-xs uppercase tracking-wider text-zinc-500">Target adapter</p>
+                <Select value={selectedAdapter} onValueChange={(value) => setSelectedAdapter(value ?? 'all')}>
+                  <SelectTrigger className="w-[220px] border-zinc-700 bg-zinc-900 text-zinc-200">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="border-zinc-700 bg-zinc-950">
+                    <SelectItem value="all">All adapters</SelectItem>
+                    {adapterNames.map((name) => (
+                      <SelectItem key={name} value={name}>{name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="flex-1" />
+
+              <Button
+                onClick={runCheck}
+                disabled={triggerMutation.isPending || adaptersQuery.isLoading}
+                size="lg"
+                className="gap-2 bg-red-600 px-8 font-semibold text-white hover:bg-red-700"
+              >
+                {triggerMutation.isPending ? (
+                  <>
+                    <Loader2 className="h-5 w-5 animate-spin" />
+                    Submitting…
+                  </>
+                ) : (
+                  <>
+                    <Zap className="h-5 w-5" />
+                    Start check
+                  </>
+                )}
+              </Button>
             </div>
           )}
         </CardContent>
       </Card>
 
-      {/* Result */}
-      {result && (
-        <div className="space-y-4">
-          <Card className="bg-zinc-950 border-zinc-800 border-green-500/20">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm flex items-center gap-2 text-green-400">
-                <CheckCircle2 className="w-4 h-4" />
-                Check Complete
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="pt-0">
-              <div className="grid grid-cols-2 gap-4 text-sm">
-                <div>
-                  <p className="text-zinc-500 text-xs mb-1">Target</p>
-                  <p className="text-zinc-200 font-medium">{result.adapter}</p>
-                </div>
-                <div>
-                  <p className="text-zinc-500 text-xs mb-1">Triggered</p>
-                  <p className="text-zinc-200">{result.triggered ? 'Yes' : 'No'}</p>
-                </div>
-              </div>
-              <div className="mt-3">
-                <p className="text-zinc-500 text-xs mb-1">Message</p>
-                <p className="text-zinc-300 text-sm bg-zinc-900 rounded-lg p-3">{result.message}</p>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Component results from adapter data */}
-          {adapters?.adapters && (
+      {triggerMutation.isError && (
+        <Card className="border-red-900/50 bg-red-950/20">
+          <CardContent className="flex items-start gap-3 p-4">
+            <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-red-400" />
             <div>
-              <p className="text-xs font-medium text-zinc-500 uppercase tracking-wider mb-3">Component Results</p>
-              <div className="space-y-2">
-                {adapters.adapters
-                  .filter((a: { name: string }) => result.adapter === 'all' || a.name === result.adapter)
-                  .flatMap((a: { name: string; components: Array<{ name: string; type: string; status?: string; last_seen?: string; metadata?: { status?: string } }> }) =>
-                    a.components.map((c) => ({ ...c, adapter: a.name }))
-                  )
-                  .map((comp: { name: string; type: string; status?: string; last_seen?: string; metadata?: { status?: string }; adapter: string }, i: number) => {
-                    const cs = comp.status ?? comp.metadata?.status ?? 'unknown';
-                    return (
-                    <Card key={i} className="bg-zinc-950 border-zinc-800">
-                      <CardContent className="p-3">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2.5">
-                            <StatusIcon status={cs} />
-                            <div>
-                              <p className="text-sm text-zinc-200 font-medium">{comp.name}</p>
-                              <p className="text-xs text-zinc-500">{comp.adapter} · {comp.type}</p>
-                            </div>
-                          </div>
-                          <Badge variant="outline" className={cn('text-xs', statusBg(cs))}>
-                            {cs.toUpperCase()}
-                          </Badge>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  ); })}
-              </div>
+              <p className="font-medium text-red-300">Check request rejected</p>
+              <p className="mt-1 text-sm text-zinc-500">{triggerMutation.error.message}</p>
             </div>
-          )}
-        </div>
+          </CardContent>
+        </Card>
       )}
 
-      {/* Check History */}
-      {checkHistory.length > 0 && (
+      {result && (
+        <Card className="border-cyan-500/20 bg-zinc-950">
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-sm text-cyan-300">
+              <CheckCircle2 className="h-4 w-4" />
+              Check request accepted
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3 pt-0">
+            <div className="grid gap-3 text-sm sm:grid-cols-2">
+              <div>
+                <p className="text-xs text-zinc-600">Target</p>
+                <p className="mt-1 font-medium text-zinc-200">{result.adapter}</p>
+              </div>
+              <div>
+                <p className="text-xs text-zinc-600">API response</p>
+                <p className="mt-1 text-zinc-300">{result.message}</p>
+              </div>
+            </div>
+            <div className="flex items-start gap-2 rounded-lg border border-zinc-800 bg-black/40 p-3 text-xs text-zinc-500">
+              <Clock3 className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+              The API accepted this request and runs collection in the background. This response does not prove
+              that the check is complete; review Status and Incidents after the cycle finishes.
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {acceptedRequests.length > 0 && (
         <div>
-          <h2 className="text-sm font-semibold text-zinc-500 uppercase tracking-wider mb-3">
-            Check History
+          <h2 className="mb-3 text-sm font-semibold uppercase tracking-wider text-zinc-500">
+            Accepted requests this session
           </h2>
-          <Card className="bg-zinc-950 border-zinc-800">
+          <Card className="border-zinc-800 bg-zinc-950">
             <CardContent className="p-0">
-              {checkHistory.map((item, i) => (
+              {acceptedRequests.map((item, index) => (
                 <div
-                  key={i}
-                  className="flex items-center justify-between px-4 py-3 border-b border-zinc-800 last:border-0 text-sm"
+                  key={`${item.acceptedAt.toISOString()}-${index}`}
+                  className="flex items-center justify-between border-b border-zinc-800 px-4 py-3 text-sm last:border-0"
                 >
                   <div className="flex items-center gap-2.5">
-                    <RefreshCw className="w-3.5 h-3.5 text-zinc-500" />
-                    <span className="text-zinc-400">{item.result.adapter}</span>
+                    <RefreshCw className="h-3.5 w-3.5 text-zinc-500" />
+                    <span className="text-zinc-400">{item.response.adapter}</span>
                   </div>
                   <div className="flex items-center gap-3">
-                    <span className="text-xs text-zinc-600">
-                      {item.time.toLocaleTimeString()}
-                    </span>
-                    <Badge variant="outline" className="text-xs bg-green-500/10 text-green-400 border-green-500/20">
-                      triggered
+                    <span className="text-xs text-zinc-600">{item.acceptedAt.toLocaleTimeString()}</span>
+                    <Badge variant="outline" className="border-cyan-500/20 bg-cyan-500/10 text-xs text-cyan-300">
+                      accepted
                     </Badge>
                   </div>
                 </div>
@@ -231,10 +165,10 @@ export default function LiveCheckPage() {
         </div>
       )}
 
-      {!result && !isPending && (
-        <div className="text-center py-12 text-zinc-600 text-sm">
-          <Zap className="w-10 h-10 mx-auto mb-3 opacity-30" />
-          Select an adapter and click Run Check to trigger an immediate check
+      {!result && !triggerMutation.isPending && !triggerMutation.isError && (
+        <div className="py-12 text-center text-sm text-zinc-600">
+          <Zap className="mx-auto mb-3 h-10 w-10 opacity-30" />
+          Select a target and start a check request.
         </div>
       )}
     </div>

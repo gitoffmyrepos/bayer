@@ -15,7 +15,7 @@ Author: Nova ⚡ | Nightwatch Platform
 """
 
 import asyncio
-import uuid
+import hashlib
 from collections import deque
 from datetime import datetime, timezone
 from typing import Optional
@@ -25,6 +25,7 @@ import structlog
 from src.adapters.base_adapter import BaseNightwatchAdapter, CheckStatus, HealthCheck
 from src.core.alert_manager import AlertManager
 from src.core.llm_client import NightwatchLLMClient, LLMError
+from src.core.remediation_gate import remediation_enabled
 
 try:
     from src.remediation.gitops_remediator import GitOpsRemediator
@@ -50,7 +51,6 @@ class Incident:
         logs: list[str],
         diagnosis: Optional[dict] = None,
     ):
-        self.id = str(uuid.uuid4())[:8]
         self.adapter_name = adapter_name
         self.title = title
         self.severity = severity
@@ -59,6 +59,15 @@ class Incident:
         self.logs = logs
         self.diagnosis = diagnosis or {}
         self.started_at = datetime.now(timezone.utc)
+        identity = "|".join(
+            [
+                adapter_name,
+                title,
+                self.started_at.isoformat(),
+                *(check.name for check in failing_checks),
+            ]
+        )
+        self.id = hashlib.sha256(identity.encode("utf-8")).hexdigest()[:12]
         self.resolved_at: Optional[datetime] = None
         self.alert_sent = False
 
@@ -147,7 +156,7 @@ class NightwatchEngine:
         healing_config = config.get("healing", {})
         repos_config = config.get("repos", {})
 
-        if REMEDIATION_AVAILABLE and healing_config.get("mode") == "auto_remediate":
+        if REMEDIATION_AVAILABLE and remediation_enabled(config):
             try:
                 # Remediation + code-analysis use the remediation LLM (MiniMax-M2.7 by default),
                 # NOT the monitoring LLM — fixes need a stronger reasoning model.
@@ -160,6 +169,12 @@ class NightwatchEngine:
                          remediation_model=getattr(self.remediation_llm, "model", "unknown"))
             except Exception as e:
                 log.warning(f"auto_remediation_init_failed: {e}")
+        else:
+            log.info(
+                "observe_mode_enabled",
+                remediation_available=REMEDIATION_AVAILABLE,
+                configured_mode=healing_config.get("mode", "observe_only"),
+            )
 
         # State
         self._incidents: deque[Incident] = deque(maxlen=max_incidents)
@@ -240,7 +255,9 @@ class NightwatchEngine:
                 None, self.adapter.run_health_checks
             )
 
-            failing = [c for c in health_checks if c.status in (CheckStatus.FAIL, CheckStatus.WARN)]
+            # UNKNOWN means observation failed; absence of evidence must never
+            # be reported as evidence that the monitored estate is healthy.
+            failing = [c for c in health_checks if c.status != CheckStatus.OK]
             critical = [c for c in health_checks if c.status == CheckStatus.FAIL]
             healthy = len(failing) == 0
 
@@ -298,7 +315,12 @@ class NightwatchEngine:
                 await self._send_incident_alert(incident)
                 incident.alert_sent = True
 
-            status = self._build_status(health_checks, metrics, "unhealthy", incident)
+            overall = (
+                "degraded"
+                if all(c.status == CheckStatus.UNKNOWN for c in failing)
+                else "unhealthy"
+            )
+            status = self._build_status(health_checks, metrics, overall, incident)
             self._last_status = status
             return status
 
@@ -376,7 +398,7 @@ class NightwatchEngine:
                 if issue_type in GitOpsRemediator.SAFE_AUTO_FIX:
                     # Require sustained failure before any restart-class fix so a
                     # healthy multi-replica service is never restarted on a
-                    # transient probe-flap / HPA-scale / single degraded sample.
+                    # transient probe-flap / HPA-scale / one degraded observation.
                     streak_key = f"{issue_type}:{resource_name}"
                     streak = self._remediation_failure_streak.get(streak_key, 0)
                     if streak < self._remediation_min_consecutive:
@@ -661,6 +683,8 @@ class NightwatchEngine:
                 entry["status"] = "unhealthy"
             elif c.status == CheckStatus.WARN and entry["status"] == "healthy":
                 entry["status"] = "degraded"
+            elif c.status == CheckStatus.UNKNOWN and entry["status"] == "healthy":
+                entry["status"] = "unknown"
 
         return {
             "status": overall,
@@ -678,7 +702,7 @@ class NightwatchEngine:
             "details": {
                 "components": list(components_map.values()),
                 "total_checks": len(health_checks),
-                "failing_checks": sum(1 for c in health_checks if c.status.value in ("fail", "warn")),
+                "failing_checks": sum(1 for c in health_checks if c.status != CheckStatus.OK),
             },
             "metrics_summary": {k: v for k, v in list(metrics.items())[:10]},
             "active_incident": incident.to_dict() if incident else None,

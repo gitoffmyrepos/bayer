@@ -36,7 +36,7 @@ ENV PYTHONPATH=/app
 
 # Non-root user for security
 RUN useradd -m -u 1000 nightwatch && chown -R nightwatch:nightwatch /app
-USER nightwatch
+USER 1000:1000
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \

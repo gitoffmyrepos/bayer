@@ -32,6 +32,7 @@ from src.api.routes import router
 from src.core.config import NightwatchConfig
 from src.core.engine import NightwatchEngine
 from src.core.llm_client import NightwatchLLMClient
+from src.core.remediation_gate import remediation_enabled
 from src.core.scheduler import NightwatchScheduler
 from src.k8s.dedup_store import DedupStore
 from src.k8s.event_watcher import DEFAULT_ALLOWED_REASONS, K8sEventWatcher
@@ -72,6 +73,18 @@ try:
     ADAPTER_REGISTRY["forextrader"] = ForexTraderAdapter
 except ImportError:
     log.warning("adapter_unavailable", type="forextrader")
+
+try:
+    from src.adapters.aws_infrastructure.adapter import AWSInfrastructureAdapter
+    ADAPTER_REGISTRY["aws_infrastructure"] = AWSInfrastructureAdapter
+except ImportError:
+    log.warning("adapter_unavailable", type="aws_infrastructure")
+
+try:
+    from src.adapters.kubernetes_clusters.adapter import KubernetesClustersAdapter
+    ADAPTER_REGISTRY["kubernetes_clusters"] = KubernetesClustersAdapter
+except ImportError:
+    log.warning("adapter_unavailable", type="kubernetes_clusters")
 
 
 def load_adapter(adapter_config: dict, config: NightwatchConfig) -> Optional[object]:
@@ -152,21 +165,27 @@ async def lifespan(app: FastAPI):
                     hint="Monitoring will run without AI analysis")
         llm_client = None
 
-    # Initialize remediation LLM client (healing / fixes) — optional, falls back to monitoring llm
+    # Initialize write-capable remediation dependencies only after both the
+    # deployment environment and config explicitly opt in.
     remediation_client = None
-    rem_cfg = config.remediation_llm
-    if rem_cfg and rem_cfg is not config.llm:
-        try:
-            remediation_client = NightwatchLLMClient(rem_cfg)
+    app.state.remediation_client = None
+    if remediation_enabled(config.raw()):
+        rem_cfg = config.remediation_llm
+        if rem_cfg and rem_cfg is not config.llm:
+            try:
+                remediation_client = NightwatchLLMClient(rem_cfg)
+                app.state.remediation_client = remediation_client
+                log.info("remediation_llm_initialized",
+                         provider=rem_cfg.get("provider"),
+                         model=remediation_client.model)
+            except Exception as e:
+                log.warning("remediation_llm_init_failed", error=str(e),
+                            hint="Remediation will fall back to monitoring LLM")
+        if remediation_client is None:
+            remediation_client = llm_client
             app.state.remediation_client = remediation_client
-            log.info("remediation_llm_initialized",
-                     provider=rem_cfg.get("provider"),
-                     model=remediation_client.model)
-        except Exception as e:
-            log.warning("remediation_llm_init_failed", error=str(e),
-                        hint="Remediation will fall back to monitoring LLM")
-    if remediation_client is None:
-        remediation_client = llm_client
+    else:
+        log.info("observe_mode_enabled", remediation_clients_initialized=False)
 
     # Load and start adapters
     enabled_adapters = config.get_adapter_configs()
@@ -440,6 +459,47 @@ async def list_adapters(request: Request):
         })
     return {"adapter_count": len(adapters), "adapters": adapters,
             "registered_types": list(ADAPTER_REGISTRY.keys())}
+
+
+@app.get("/metrics")
+async def get_metrics(request: Request, adapter: Optional[str] = None):
+    """Return the latest real metrics snapshot for one or all adapters."""
+    if adapter and adapter not in request.app.state.engines:
+        raise HTTPException(status_code=404, detail=f"Adapter '{adapter}' not found")
+
+    metrics = {}
+    for name, engine in request.app.state.engines.items():
+        if adapter and name != adapter:
+            continue
+        metrics[name] = engine.get_status().get("metrics_summary", {})
+    return {
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "metrics": metrics,
+    }
+
+
+@app.post("/report")
+async def generate_report(request: Request, body: dict):
+    """Generate an evidence-grounded LLM report for a stored incident."""
+    incident_id = str(body.get("incident_id", "")).strip()
+    adapter_name = body.get("adapter")
+    if not incident_id:
+        raise HTTPException(status_code=422, detail="incident_id is required")
+
+    for name, engine in request.app.state.engines.items():
+        accepted_adapter_names = {name, engine.adapter.application_name}
+        if adapter_name and adapter_name not in accepted_adapter_names:
+            continue
+        for incident in engine.get_incidents(limit=100):
+            if incident.get("id") != incident_id:
+                continue
+            llm = request.app.state.llm_client
+            if llm is None:
+                raise HTTPException(status_code=503, detail="LLM not configured")
+            report = await asyncio.to_thread(llm.generate_incident_report, incident)
+            return {"incident_id": incident_id, "report": report}
+
+    raise HTTPException(status_code=404, detail=f"Incident '{incident_id}' not found")
 
 
 @app.get("/schedule")

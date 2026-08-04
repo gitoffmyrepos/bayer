@@ -1,0 +1,40 @@
+# LocalStack boss demo: AWS-only, Ollama-backed, observe-only.
+nightwatch:
+  check_interval_seconds: 30
+  max_incidents_history: 100
+  enable_ai_diagnosis: true
+  # The demo logs and displays findings; it does not send external alerts.
+  alert_severities: []
+
+llm:
+  provider: ollama
+  model: qwen3:14b
+  base_url: ${OLLAMA_BASE_URL}
+  max_tokens: 2048
+  temperature: 0.1
+  timeout_seconds: 30
+
+adapters:
+  - name: aws-infrastructure
+    type: aws_infrastructure
+    config_file: aws_infrastructure/config.yaml
+    enabled: true
+
+  - name: kubernetes-clusters
+    type: kubernetes_clusters
+    enabled: true
+    application_name: LocalStack EKS Workloads
+    discover_kubeconfig_contexts: true
+    kubeconfig_path: /app/kubeconfigs/localstack.yaml
+    request_timeout_seconds: 10
+
+alerting: {}
+
+healing:
+  mode: observe_only
+  dry_run: true
+  allowed_actions: []
+
+api:
+  host: 0.0.0.0
+  port: 8080

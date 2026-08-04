@@ -1,0 +1,113 @@
+name: nightwatch-demo
+
+services:
+  localstack:
+    image: ${LOCALSTACK_IMAGE:?Set LOCALSTACK_IMAGE to a validated LocalStack for AWS image tag or digest}
+    ports:
+      - "127.0.0.1:4566:4566"
+      - "127.0.0.1:4510-4559:4510-4559"
+    environment:
+      AWS_DEFAULT_REGION: ${AWS_REGION:-us-east-1}
+      DEBUG: ${LOCALSTACK_DEBUG:-0}
+      EC2_VM_MANAGER: docker
+      NIGHTWATCH_DEMO_PREFIX: ${NIGHTWATCH_DEMO_PREFIX:?Set NIGHTWATCH_DEMO_PREFIX for deterministic resource names}
+      NIGHTWATCH_EC2_AMI_ID: ${NIGHTWATCH_EC2_AMI_ID:?Set NIGHTWATCH_EC2_AMI_ID to a LocalStack Docker-backed AMI}
+      NIGHTWATCH_ECS_CONTAINER_IMAGE: ${NIGHTWATCH_ECS_CONTAINER_IMAGE:?Set NIGHTWATCH_ECS_CONTAINER_IMAGE to an approved pinned image}
+      NIGHTWATCH_ECS_DESIRED_COUNT: ${NIGHTWATCH_ECS_DESIRED_COUNT:?Set NIGHTWATCH_ECS_DESIRED_COUNT greater than zero}
+      LOCALSTACK_AUTH_TOKEN: ${LOCALSTACK_AUTH_TOKEN:?Set LOCALSTACK_AUTH_TOKEN for LocalStack Ultimate EKS emulation}
+      LOCALSTACK_HOST: localstack:4566
+      MAIN_DOCKER_NETWORK: nightwatch-demo
+      MANAGED_K8S_PROVIDER: k3s
+      PERSISTENCE: "1"
+      SERVICES: eks,ec2,ecs,iam,sts,cloudwatch,logs,s3,lambda,stepfunctions,glue
+    volumes:
+      - localstack-data:/var/lib/localstack
+      - ./localstack/init-aws.sh:/etc/localstack/init/ready.d/init-aws.sh:ro
+      - nightwatch-kubeconfigs:/kubeconfigs
+      - /var/run/docker.sock:/var/run/docker.sock
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          prefix="$${NIGHTWATCH_DEMO_PREFIX}"
+          && awslocal eks describe-cluster --name "$${prefix}-eks" >/dev/null 2>&1
+          && awslocal ec2 describe-instances
+          --filters "Name=tag:Name,Values=$${prefix}-stopped"
+          --query 'Reservations[0].Instances[0].State.Name' --output text
+          | grep -qx stopped
+          && awslocal ecs describe-services --cluster "$${prefix}-ecs"
+          --services "$${prefix}-capacity"
+          --query 'services[0].status' --output text
+          | grep -qx ACTIVE
+          && desired="$$(awslocal ecs describe-services
+          --cluster "$${prefix}-ecs" --services "$${prefix}-capacity"
+          --query 'services[0].desiredCount' --output text)"
+          && running="$$(awslocal ecs describe-services
+          --cluster "$${prefix}-ecs" --services "$${prefix}-capacity"
+          --query 'services[0].runningCount' --output text)"
+          && [ "$$desired" -eq "$${NIGHTWATCH_ECS_DESIRED_COUNT}" ]
+          && [ "$$running" -lt "$$desired" ]
+      interval: 5s
+      timeout: 10s
+      retries: 30
+      start_period: 15s
+    networks:
+      - nightwatch-demo
+
+  nightwatch-api:
+    build:
+      context: .
+    ports:
+      - "127.0.0.1:8080:8080"
+    environment:
+      AWS_ACCESS_KEY_ID: test
+      AWS_DEFAULT_REGION: ${AWS_REGION:-us-east-1}
+      AWS_ENDPOINT_URL: http://localstack:4566
+      AWS_REGION: ${AWS_REGION:-us-east-1}
+      AWS_SECRET_ACCESS_KEY: test
+      CORS_ALLOWED_ORIGINS: http://localhost:3000,http://127.0.0.1:3000
+      LLM_PROVIDER: ollama
+      NIGHTWATCH_CONFIG: /app/config/nightwatch.demo.yaml
+      NIGHTWATCH_GH_ENABLED: "false"
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      REMEDIATION_ENABLED: "false"
+    extra_hosts:
+      - host.docker.internal:host-gateway
+    volumes:
+      - ./config:/app/config:ro
+      - nightwatch-kubeconfigs:/app/kubeconfigs:ro
+    depends_on:
+      localstack:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+      start_period: 15s
+    networks:
+      - nightwatch-demo
+
+  nightwatch-ui:
+    build:
+      context: ./frontend
+      args:
+        NEXT_PUBLIC_API_URL: http://localhost:8080
+    ports:
+      - "127.0.0.1:3000:3000"
+    environment:
+      HOSTNAME: 0.0.0.0
+      PORT: "3000"
+    depends_on:
+      nightwatch-api:
+        condition: service_healthy
+    networks:
+      - nightwatch-demo
+
+networks:
+  nightwatch-demo:
+    name: nightwatch-demo
+
+volumes:
+  localstack-data:
+  nightwatch-kubeconfigs:

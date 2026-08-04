@@ -1,145 +1,124 @@
-// In production, the gateway routes /api/* → backend (strips /api prefix).
-// In local dev, override with: NEXT_PUBLIC_API_URL=http://localhost:8080 npm run dev
+// In production, kgateway routes /api/* to the backend and strips /api.
+// Local development can override this with NEXT_PUBLIC_API_URL=http://localhost:8080.
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || '/api';
 
-// ─── Mock Data ────────────────────────────────────────────────────────────────
-const mockStatus = {
-  overall: 'healthy',
-  adapters: {
-    forextrader: {
-      adapter: 'forextrader',
-      status: 'healthy',
-      last_check: new Date().toISOString(),
-      components_checked: 12,
-      issues_found: 0,
-      details: {
-        components: [
-          { name: 'ml-trainer', type: 'kubernetes', status: 'healthy', last_seen: new Date().toISOString() },
-          { name: 'api-gateway', type: 'kubernetes', status: 'healthy', last_seen: new Date().toISOString() },
-          { name: 'timescaledb', type: 'database', status: 'healthy', last_seen: new Date().toISOString() },
-          { name: 'redpanda', type: 'messaging', status: 'healthy', last_seen: new Date().toISOString() },
-        ],
-      },
-    },
-    aws_pipeline: {
-      adapter: 'aws_pipeline',
-      status: 'degraded',
-      last_check: new Date(Date.now() - 300000).toISOString(),
-      components_checked: 8,
-      issues_found: 1,
-      details: {
-        components: [
-          { name: 's3-ingestion', type: 'aws', status: 'healthy', last_seen: new Date().toISOString() },
-          { name: 'lambda-processor', type: 'aws', status: 'degraded', last_seen: new Date().toISOString() },
-          { name: 'rds-postgres', type: 'database', status: 'healthy', last_seen: new Date().toISOString() },
-        ],
-      },
-    },
-  },
-  timestamp: new Date().toISOString(),
+export type NightwatchComponent = {
+  name: string;
+  type: string;
+  status?: string;
+  category?: string;
+  description?: string;
+  last_seen?: string;
+  metadata?: Record<string, unknown>;
 };
 
-const mockIncidents = {
-  total: 2,
-  incidents: [
-    {
-      id: 'inc-001',
-      severity: 'P2',
-      component: 'lambda-processor',
-      message: 'Lambda function execution latency above threshold (p99: 4200ms)',
-      adapter: 'aws_pipeline',
-      started_at: new Date(Date.now() - 1800000).toISOString(),
-      resolved_at: null,
-      status: 'active',
-      ai_analysis: 'The Lambda function is experiencing elevated latency likely due to cold starts combined with increased payload sizes. Recommend reviewing memory allocation and considering provisioned concurrency for critical functions.',
-    },
-    {
-      id: 'inc-002',
-      severity: 'P3',
-      component: 'ml-trainer',
-      message: 'GPU utilization dropped to 45% during scheduled training window',
-      adapter: 'forextrader',
-      started_at: new Date(Date.now() - 7200000).toISOString(),
-      resolved_at: new Date(Date.now() - 5400000).toISOString(),
-      status: 'resolved',
-      ai_analysis: 'GPU utilization dip was caused by a data preprocessing bottleneck. Training resumed normally after the preprocessing queue cleared.',
-    },
-  ],
+export type NightwatchAdapter = {
+  name: string;
+  application: string;
+  class: string;
+  is_running: boolean;
+  check_count: number;
+  components: NightwatchComponent[];
 };
 
-const mockAdapters = {
-  adapter_count: 2,
-  adapters: [
-    {
-      name: 'forextrader',
-      application: 'ForexTrader ML Platform',
-      class: 'ForexTraderAdapter',
-      is_running: true,
-      check_count: 47,
-      components: [
-        { name: 'ml-trainer', type: 'kubernetes', status: 'healthy', category: 'ML / AI', description: '1/1 replicas', last_seen: new Date().toISOString() },
-        { name: 'api-gateway', type: 'kubernetes', status: 'healthy', category: 'Ops & Infrastructure', description: '2/2 replicas', last_seen: new Date().toISOString() },
-        { name: 'timescaledb', type: 'cnpg_cluster', status: 'degraded', category: 'Data Layer', description: '1/1 instances', last_seen: new Date().toISOString() },
-        { name: 'redpanda', type: 'k8s_statefulset', status: 'degraded', category: 'Data Layer', description: '1/3 pods ready', last_seen: new Date().toISOString() },
-        { name: 'qdrant', type: 'k8s_statefulset', status: 'healthy', category: 'Data Layer', description: '1/1 pods ready', last_seen: new Date().toISOString() },
-        { name: 'oanda-account', type: 'broker_api', status: 'healthy', category: 'OANDA', description: 'OANDA FX broker account', last_seen: new Date().toISOString() },
-      ],
-    },
-    {
-      name: 'aws_pipeline',
-      application: 'AWS Data Pipeline',
-      class: 'AWSPipelineAdapter',
-      is_running: true,
-      check_count: 23,
-      components: [
-        { name: 's3-ingestion', type: 'aws', status: 'healthy', category: 'ETL Pipeline', description: 'S3 ingestion bucket', last_seen: new Date().toISOString() },
-        { name: 'lambda-processor', type: 'aws', status: 'degraded', category: 'ETL Pipeline', description: 'Lambda function', last_seen: new Date().toISOString() },
-        { name: 'rds-postgres', type: 'database', status: 'healthy', category: 'Data Layer', description: 'RDS PostgreSQL', last_seen: new Date().toISOString() },
-        { name: 'cloudwatch-metrics', type: 'monitoring', status: 'healthy', category: 'Analytics', description: 'CloudWatch', last_seen: new Date().toISOString() },
-      ],
-    },
-  ],
-  registered_types: ['forextrader', 'aws_pipeline'],
+export type NightwatchIncident = {
+  id: string;
+  severity: string;
+  component: string;
+  message: string;
+  adapter: string;
+  started_at: string;
+  resolved_at?: string | null;
+  status: string;
+  ai_analysis?: string;
+  diagnosis?: Record<string, unknown>;
 };
 
-const mockHealth = {
-  status: 'ok',
-  version: '2.0.0',
-  timestamp: new Date().toISOString(),
-  uptime_seconds: 16320,
+type HealthResponse = {
+  status: string;
+  version: string;
+  timestamp: string;
+  uptime_seconds: number;
 };
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
+type StatusResponse = {
+  overall: string;
+  timestamp: string;
+  adapters: Record<string, Record<string, unknown>>;
+};
 
-async function fetchWithFallback<T>(url: string, fallback: T, options?: RequestInit): Promise<T> {
-  try {
-    const res = await fetch(url, { ...options, signal: AbortSignal.timeout(5000) });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    return (await res.json()) as T;
-  } catch {
-    console.warn(`[Nightwatch] API unavailable, using mock data for: ${url}`);
-    return fallback;
+type IncidentsResponse = { total: number; incidents: NightwatchIncident[] };
+type AdaptersResponse = {
+  adapter_count: number;
+  adapters: NightwatchAdapter[];
+  registered_types?: string[];
+};
+export type NightwatchScheduledTask = {
+  name: string;
+  interval_seconds: number;
+  last_run?: string | null;
+  run_count: number;
+  error_count: number;
+  is_running: boolean;
+  [key: string]: unknown;
+};
+type ScheduleResponse = {
+  tasks: NightwatchScheduledTask[];
+};
+type MetricsResponse = {
+  timestamp: string;
+  metrics: Record<string, Record<string, unknown>>;
+};
+export type TriggerResponse = { triggered: boolean; adapter: string; message: string };
+type ReportResponse = { incident_id: string; report: string };
+
+export class NightwatchApiError extends Error {
+  constructor(
+    message: string,
+    readonly status?: number,
+    readonly url?: string,
+  ) {
+    super(message);
+    this.name = 'NightwatchApiError';
   }
 }
 
-async function fetchTextWithFallback(url: string, fallback: string): Promise<string> {
-  try {
-    const res = await fetch(url, { signal: AbortSignal.timeout(5000) });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    return await res.text();
-  } catch {
-    return fallback;
-  }
-}
+async function request<T>(
+  path: string,
+  options?: RequestInit,
+  timeoutMilliseconds = 10000,
+): Promise<T> {
+  const url = `${API_BASE}${path}`;
+  let response: Response;
 
-// ─── API Client ───────────────────────────────────────────────────────────────
+  try {
+    response = await fetch(url, {
+      ...options,
+      signal: AbortSignal.timeout(timeoutMilliseconds),
+    });
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : 'network request failed';
+    throw new NightwatchApiError(`Nightwatch API unavailable: ${detail}`, undefined, url);
+  }
+
+  if (!response.ok) {
+    let detail = `HTTP ${response.status}`;
+    try {
+      const body = (await response.json()) as { detail?: string };
+      detail = body.detail || detail;
+    } catch {
+      // The status code remains the authoritative failure when no JSON body exists.
+    }
+    throw new NightwatchApiError(detail, response.status, url);
+  }
+
+  return (await response.json()) as T;
+}
 
 export const nightwatchApi = {
-  getHealth: () =>
-    fetchWithFallback(`${API_BASE}/health`, mockHealth),
+  getHealth: () => request<HealthResponse>('/health'),
 
-  getStatus: () =>
-    fetchWithFallback(`${API_BASE}/status`, mockStatus),
+  getStatus: () => request<StatusResponse>('/status'),
 
   getIncidents: (params?: { limit?: number; active_only?: boolean; adapter?: string }) => {
     const searchParams = new URLSearchParams();
@@ -147,51 +126,28 @@ export const nightwatchApi = {
     if (params?.active_only) searchParams.set('active_only', 'true');
     if (params?.adapter) searchParams.set('adapter', params.adapter);
     const query = searchParams.toString();
-    return fetchWithFallback(
-      `${API_BASE}/incidents${query ? `?${query}` : ''}`,
-      mockIncidents
-    );
+    return request<IncidentsResponse>(`/incidents${query ? `?${query}` : ''}`);
   },
 
-  triggerCheck: (adapter?: string) =>
-    fetchWithFallback(
-      `${API_BASE}/check`,
-      { triggered: true, adapter: adapter || 'all', message: 'Check cycle started (mock)' },
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ adapter }),
-      }
-    ),
+  triggerCheck: (adapter?: string) => {
+    const query = adapter ? `?adapter=${encodeURIComponent(adapter)}` : '';
+    return request<TriggerResponse>(`/check${query}`, { method: 'POST' });
+  },
 
-  getAdapters: () =>
-    fetchWithFallback(`${API_BASE}/adapters`, mockAdapters),
+  getAdapters: () => request<AdaptersResponse>('/adapters'),
 
-  getMetrics: () =>
-    fetchTextWithFallback(
-      `${API_BASE}/metrics`,
-      '# Nightwatch Metrics (mock)\nnightwatch_check_total{adapter="forextrader"} 47\nnightwatch_check_total{adapter="aws_pipeline"} 23\n'
-    ),
+  getMetrics: () => request<MetricsResponse>('/metrics'),
 
-  getSchedule: () =>
-    fetchWithFallback(`${API_BASE}/schedule`, {
-      tasks: [
-        { name: 'monitor_forextrader', interval_seconds: 300, last_run: new Date().toISOString(), status: 'running' },
-        { name: 'monitor_aws_pipeline', interval_seconds: 300, last_run: new Date().toISOString(), status: 'running' },
-      ],
-    }),
+  getSchedule: () => request<ScheduleResponse>('/schedule'),
 
   generateReport: (incident_id: string, adapter?: string) =>
-    fetchWithFallback(
-      `${API_BASE}/report`,
-      {
-        incident_id,
-        report: `## Incident Report: ${incident_id}\n\n**Generated:** ${new Date().toLocaleString()}\n\n### Summary\nMock report generated — connect the backend to get real AI analysis.\n\n### Root Cause\nPending investigation.\n\n### Recommendations\n1. Review service logs\n2. Check infrastructure metrics\n3. Monitor for recurrence`,
-      },
+    request<ReportResponse>(
+      '/report',
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ incident_id, adapter }),
-      }
+      },
+      120000,
     ),
 };

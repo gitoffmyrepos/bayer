@@ -11,15 +11,25 @@ nightwatch:
 
 # ─── LLM Provider ─────────────────────────────────────────────────────────────
 llm:
-  provider: anthropic
-  model: claude-haiku-4-20250514
-  api_key: ${ANTHROPIC_API_KEY}
-  max_tokens: 1024
+  provider: ollama
+  model: qwen3:14b
+  base_url: ${OLLAMA_BASE_URL}
+  max_tokens: 2048
   temperature: 0.1
   timeout_seconds: 30
 
 # ─── Application Adapters ─────────────────────────────────────────────────────
 adapters:
+  - name: aws-infrastructure
+    type: aws_infrastructure
+    config_file: aws_infrastructure/config.yaml
+    enabled: true
+
+  - name: kubernetes-clusters
+    type: kubernetes_clusters
+    config_file: kubernetes_clusters/config.yaml
+    enabled: true
+
   - name: forextrader
     type: forextrader
     config_file: forextrader/config.yaml
@@ -46,17 +56,17 @@ repos:
     access: read  # Application code — read only for analysis
   gitops:
     path: ${GITOPS_REPO_PATH:/repos/sb-gitops}
-    access: readwrite  # K8s manifests — auto-fix and push
+    access: read  # Observe mode default; enabling remediation requires an explicit config change
     branch: master
   infra:
     path: ${INFRA_REPO_PATH:/repos/sb-dev-infra}
-    access: readwrite  # Ansible/Terraform — auto-fix and push
+    access: read  # Observe mode default; enabling remediation requires an explicit config change
     branch: master
 
 # ─── Auto-Healing (GitOps Remediation) ────────────────────────────────────────
 healing:
-  mode: auto_remediate
-  dry_run: false
+  mode: observe_only
+  dry_run: true
   escalation_channel: discord
   nova_mention_id: "1319042937081593857"
   allowed_actions:
@@ -67,9 +77,8 @@ healing:
     - gitops_fix_image
     - gitops_fix_resources
     - code_analyze_and_recommend
-  # LLM for remediation — MiniMax-M2.7 (Anthropic-compat endpoint).
-  # Strong reasoning model for actual code fixes & GitOps remediation.
-  # Monitoring still uses the primary `llm` block above (Anthropic Haiku) for cheap triage.
+  # Dormant remediation model. It is constructed only when both the environment
+  # gate and auto_remediate mode are explicitly enabled. Monitoring uses Ollama.
   remediation_llm:
     provider: anthropic
     model: "MiniMax-M2.7"

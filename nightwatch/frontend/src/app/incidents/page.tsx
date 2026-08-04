@@ -10,7 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Skeleton } from '@/components/ui/skeleton';
-import { useIncidents, useAdapters, useGenerateReport } from '@/hooks/useNightwatch';
+import { useIncidents, useGenerateReport } from '@/hooks/useNightwatch';
 import { cn } from '@/lib/utils';
 
 type Incident = {
@@ -56,10 +56,16 @@ export default function IncidentsPage() {
   const [selected, setSelected] = useState<Incident | null>(null);
 
   const { data: incidents, isLoading } = useIncidents({ limit: 100 });
-  const { data: adapters } = useAdapters();
-  const { mutate: generateReport, isPending: generatingReport, data: reportData } = useGenerateReport();
+  const {
+    mutate: generateReport,
+    isPending: generatingReport,
+    data: reportData,
+    reset: resetReport,
+  } = useGenerateReport();
 
-  const adapterNames = adapters?.adapters?.map((a: { name: string }) => a.name) ?? [];
+  const adapterNames = Array.from(
+    new Set((incidents?.incidents ?? []).map((incident: Incident) => incident.adapter)),
+  ).sort();
 
   const filtered = (incidents?.incidents ?? []).filter((inc: Incident) => {
     const matchSearch =
@@ -162,7 +168,10 @@ export default function IncidentsPage() {
                 {paginated.map((inc: Incident) => (
                   <tr
                     key={inc.id}
-                    onClick={() => setSelected(inc)}
+                    onClick={() => {
+                      resetReport();
+                      setSelected(inc);
+                    }}
                     className="border-b border-zinc-800 hover:bg-zinc-900/40 cursor-pointer transition-colors"
                   >
                     <td className="px-4 py-3 text-xs text-zinc-500 font-mono">{inc.id}</td>
@@ -232,7 +241,13 @@ export default function IncidentsPage() {
       )}
 
       {/* Incident Detail Sheet */}
-      <Sheet open={!!selected} onOpenChange={() => setSelected(null)}>
+      <Sheet
+        open={!!selected}
+        onOpenChange={() => {
+          resetReport();
+          setSelected(null);
+        }}
+      >
         <SheetContent className="bg-zinc-950 border-zinc-800 text-white w-full sm:max-w-xl overflow-y-auto">
           <SheetHeader className="pb-4 border-b border-zinc-800">
             <SheetTitle className="flex items-center gap-2 text-white">
@@ -320,7 +335,7 @@ export default function IncidentsPage() {
               {/* Generate Report */}
               <div className="border-t border-zinc-800 pt-4">
                 <Button
-                  onClick={() => generateReport({ incident_id: selected.id, adapter: selected.adapter })}
+                  onClick={() => generateReport({ incident_id: selected.id })}
                   disabled={generatingReport}
                   className="w-full bg-red-600 hover:bg-red-700 text-white"
                 >

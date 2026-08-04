@@ -2,8 +2,7 @@
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Separator } from '@/components/ui/separator';
-import { BookOpen, Terminal, Puzzle, Eye, Zap } from 'lucide-react';
+import { Terminal, Puzzle, Eye, Zap } from 'lucide-react';
 
 function Endpoint({
   method,
@@ -48,12 +47,12 @@ export default function DocsPage() {
         </CardHeader>
         <CardContent className="text-sm text-slate-400 space-y-2">
           <p>
-            Nightwatch is a <strong className="text-slate-200">cloud-agnostic AI monitoring platform</strong> that
-            monitors any application with any LLM, running anywhere.
+            Nightwatch is a <strong className="text-slate-200">read-only operations intelligence platform</strong> for
+            cloud infrastructure, Kubernetes, and application pipelines.
           </p>
           <p>
             It uses pluggable <em className="text-slate-300">adapters</em> to connect to different platforms
-            (Kubernetes, AWS, databases, etc.) and an LLM backend for intelligent root cause analysis.
+            and a configured LLM to explain deterministic findings. The LLM does not establish resource health.
           </p>
         </CardContent>
       </Card>
@@ -74,11 +73,11 @@ export default function DocsPage() {
           <Endpoint method="GET" path="/health" description="System health and uptime" />
           <Endpoint method="GET" path="/status" description="Status of all monitored adapters and components" />
           <Endpoint method="GET" path="/incidents" description="List incidents (supports limit, active_only, adapter filters)" />
-          <Endpoint method="POST" path="/check" description="Trigger an immediate check cycle (body: {adapter?: string})" />
+          <Endpoint method="POST" path="/check?adapter=name" description="Accept an asynchronous check request; omit adapter to target all adapters" />
           <Endpoint method="GET" path="/adapters" description="List all configured adapters and their component inventory" />
-          <Endpoint method="GET" path="/metrics" description="Prometheus-format metrics" />
-          <Endpoint method="GET" path="/schedule" description="Scheduler task status" />
-          <Endpoint method="POST" path="/report" description="Generate AI incident report (body: {incident_id, adapter?})" />
+          <Endpoint method="GET" path="/metrics?adapter=name" description="Latest collected metrics as JSON; adapter is optional" />
+          <Endpoint method="GET" path="/schedule" description="Scheduler intervals, run counts, errors, and running state" />
+          <Endpoint method="POST" path="/report" description="Generate an LLM report for an existing incident (JSON body: incident_id, optional adapter)" />
         </CardContent>
       </Card>
 
@@ -93,15 +92,18 @@ export default function DocsPage() {
         <CardContent className="text-sm text-slate-400 space-y-3">
           <p>Adapters live in <code className="text-slate-300">src/adapters/&lt;name&gt;/adapter.py</code></p>
           <div className="bg-slate-800 rounded-lg p-3 font-mono text-xs text-slate-300 overflow-x-auto">
-            {`class MyAdapter(NightwatchAdapter):
-    def initialize(self) -> None: ...
-    def get_component_inventory(self) -> List[Component]: ...
-    async def collect_metrics(self) -> MetricSet: ...
-    def cleanup(self) -> None: ...`}
+            {`class MyAdapter(BaseNightwatchAdapter):
+    @property
+    def application_name(self) -> str: ...
+    def collect_metrics(self) -> dict: ...
+    def collect_logs(self, lookback_minutes=15) -> list[str]: ...
+    def run_health_checks(self) -> list[HealthCheck]: ...
+    def get_component_inventory(self) -> list[Component]: ...`}
           </div>
           <p className="text-xs">
             Register in <code className="text-slate-300">src/api/main.py</code> ADAPTER_REGISTRY,
-            then add to <code className="text-slate-300">config/nightwatch.yaml</code>.
+            then add it to <code className="text-slate-300">config/nightwatch.yaml</code>. See the repository
+            README for validation, read-only authorization, and deterministic test requirements.
           </p>
         </CardContent>
       </Card>
@@ -117,10 +119,11 @@ export default function DocsPage() {
         <CardContent>
           <div className="space-y-3 text-sm">
             {[
-              ['1. Start the backend', 'cd nightwatch && python -m src.api.main'],
-              ['2. Start the frontend', 'cd nightwatch/frontend && npm run dev'],
-              ['3. Open dashboard', 'http://localhost:3000'],
-              ['4. Or use Docker', 'docker compose up'],
+              ['1. Configure the LocalStack demo', 'export LOCALSTACK_AUTH_TOKEN=... LOCALSTACK_IMAGE=... NIGHTWATCH_DEMO_PREFIX=... NIGHTWATCH_EC2_AMI_ID=... NIGHTWATCH_ECS_CONTAINER_IMAGE=... NIGHTWATCH_ECS_DESIRED_COUNT=...'],
+              ['2. Start the LocalStack demo', 'docker compose -f docker-compose.demo.yml up -d --build'],
+              ['3. Verify service state', 'docker compose -f docker-compose.demo.yml ps'],
+              ['4. Trigger collection', 'curl -fsS -X POST http://localhost:8080/check'],
+              ['5. Open the console', 'http://localhost:3000'],
             ].map(([label, cmd]) => (
               <div key={label}>
                 <p className="text-xs text-slate-500 mb-1">{label}</p>
@@ -128,6 +131,11 @@ export default function DocsPage() {
               </div>
             ))}
           </div>
+          <p className="mt-4 text-xs leading-relaxed text-slate-500">
+            The demo requires Docker socket access, a licensed LocalStack EKS token, and reachable Ollama.
+            Follow <code className="text-slate-400">README.md</code> for prerequisites, safety verification,
+            real-AWS setup, and teardown. The API has no built-in authentication; do not expose port 8080 publicly.
+          </p>
         </CardContent>
       </Card>
     </div>

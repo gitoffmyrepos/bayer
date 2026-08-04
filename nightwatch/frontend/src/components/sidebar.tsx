@@ -6,12 +6,16 @@ import { useState } from 'react';
 import {
   LayoutDashboard,
   AlertTriangle,
-  Puzzle,
+  Boxes,
+  ListChecks,
+  BrainCircuit,
+  Cloud,
+  GitFork,
+  Link2,
   Zap,
   Settings,
   BookOpen,
   Menu,
-  X,
   Eye,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -19,18 +23,48 @@ import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
 import { useHealth } from '@/hooks/useNightwatch';
 
-const navItems = [
-  { href: '/', label: 'Dashboard', icon: LayoutDashboard },
-  { href: '/incidents', label: 'Incidents', icon: AlertTriangle },
-  { href: '/adapters', label: 'Adapters', icon: Puzzle },
-  { href: '/check', label: 'Live Check', icon: Zap },
-  { href: '/settings', label: 'Settings', icon: Settings },
-  { href: '/docs', label: 'Docs', icon: BookOpen },
+const navGroups = [
+  {
+    label: 'Observe',
+    items: [
+      { href: '/cloud', label: 'Cloud Estate', icon: Cloud },
+      { href: '/kubernetes', label: 'Kubernetes', icon: Boxes },
+      { href: '/pipelines', label: 'Pipelines', icon: GitFork },
+    ],
+  },
+  {
+    label: 'Investigate',
+    items: [
+      { href: '/check', label: 'Live Check', icon: Zap },
+      { href: '/findings', label: 'Findings', icon: ListChecks },
+      { href: '/topology', label: 'Topology', icon: GitFork },
+      { href: '/incidents', label: 'Incidents', icon: AlertTriangle },
+      { href: '/ai-analyst', label: 'AI Analyst', icon: BrainCircuit },
+    ],
+  },
+  {
+    label: 'Manage',
+    items: [
+      { href: '/adapters', label: 'Connections', icon: Link2 },
+      { href: '/settings', label: 'Settings', icon: Settings },
+      { href: '/docs', label: 'Documentation', icon: BookOpen },
+    ],
+  },
 ];
 
-function HealthDot({ status }: { status?: string }) {
-  const color =
-    status === 'healthy' || status === 'ok'
+function HealthDot({ status, unavailable = false }: { status?: string; unavailable?: boolean }) {
+  const label = unavailable
+    ? 'Nightwatch API unavailable'
+    : status === 'healthy' || status === 'ok'
+      ? 'Nightwatch API healthy'
+      : status === 'degraded'
+        ? 'Nightwatch API degraded'
+        : status === 'unhealthy'
+          ? 'Nightwatch API unhealthy'
+          : 'Nightwatch API status unknown';
+  const color = unavailable
+    ? 'bg-zinc-600'
+    : status === 'healthy' || status === 'ok'
       ? 'bg-green-400'
       : status === 'degraded'
       ? 'bg-yellow-400'
@@ -43,7 +77,11 @@ function HealthDot({ status }: { status?: string }) {
         'inline-block w-2.5 h-2.5 rounded-full animate-pulse',
         color
       )}
-    />
+      role="status"
+      title={label}
+    >
+      <span className="sr-only">{label}</span>
+    </span>
   );
 }
 
@@ -79,7 +117,7 @@ function NavLink({
 }
 
 function SidebarContent({ onClose }: { onClose?: () => void }) {
-  const { data: health } = useHealth();
+  const { data: health, isError: healthUnavailable } = useHealth();
 
   return (
     <div className="flex flex-col h-full bg-black border-r border-zinc-900">
@@ -92,24 +130,46 @@ function SidebarContent({ onClose }: { onClose?: () => void }) {
           <div>
             <div className="flex items-center gap-2">
               <span className="font-bold text-white tracking-tight">⚡ Nightwatch</span>
-              <HealthDot status={health?.status === 'ok' ? 'healthy' : health?.status} />
+              <HealthDot status={health?.status} unavailable={healthUnavailable} />
             </div>
-            <p className="text-xs text-zinc-600">v{health?.version ?? '2.0.0'}</p>
+            <p className="text-xs text-zinc-600">
+              {health?.version ? `v${health.version}` : 'Version unavailable'}
+            </p>
           </div>
         </div>
       </div>
 
       {/* Nav */}
-      <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
-        {navItems.map((item) => (
-          <NavLink key={item.href} {...item} onClick={onClose} />
+      <nav className="flex-1 px-3 py-4 space-y-5 overflow-y-auto">
+        <div className="space-y-1">
+          <NavLink
+            href="/"
+            label="Command Center"
+            icon={LayoutDashboard}
+            onClick={onClose}
+          />
+        </div>
+
+        {navGroups.map((group) => (
+          <div key={group.label} className="space-y-1">
+            <p className="px-3 pb-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-zinc-600">
+              {group.label}
+            </p>
+            {group.items.map((item) => (
+              <NavLink
+                key={`${group.label}-${item.href}`}
+                {...item}
+                onClick={onClose}
+              />
+            ))}
+          </div>
         ))}
       </nav>
 
       {/* Footer */}
       <div className="px-4 py-3 border-t border-zinc-900">
         <p className="text-xs text-zinc-700">
-          Cloud-agnostic AI monitoring
+          Read-only operations intelligence
         </p>
       </div>
     </div>
@@ -133,10 +193,18 @@ export function Sidebar() {
           <span className="font-bold text-white">⚡ Nightwatch</span>
         </div>
         <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
-          <SheetTrigger>
-            <Button variant="ghost" size="icon" className="text-zinc-400">
-              {mobileOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
-            </Button>
+          <SheetTrigger
+            render={
+              <Button
+                variant="ghost"
+                size="icon"
+                className="text-zinc-400"
+                aria-label="Open navigation menu"
+              />
+            }
+          >
+            <Menu className="w-5 h-5" />
+            <span className="sr-only">Open navigation menu</span>
           </SheetTrigger>
           <SheetContent side="left" className="p-0 w-56 bg-black border-zinc-900">
             <SidebarContent onClose={() => setMobileOpen(false)} />
