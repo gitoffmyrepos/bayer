@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { formatDistanceToNow } from 'date-fns';
-import { Search, ChevronLeft, ChevronRight, FileText, Loader2 } from 'lucide-react';
+import { BrainCircuit, Search, ChevronLeft, ChevronRight, FileText, Loader2 } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
@@ -11,19 +11,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useIncidents, useGenerateReport } from '@/hooks/useNightwatch';
+import type { NightwatchIncident } from '@/lib/api';
 import { cn } from '@/lib/utils';
 
-type Incident = {
-  id: string;
-  severity: string;
-  component: string;
-  message: string;
-  adapter: string;
-  started_at: string;
-  resolved_at?: string | null;
-  status: string;
-  ai_analysis?: string;
-};
+type Incident = NightwatchIncident;
 
 function severityBg(sev: string) {
   switch (sev?.toLowerCase()) {
@@ -47,13 +38,87 @@ function duration(started: string, resolved?: string | null) {
 
 const PAGE_SIZE = 15;
 
+function BackgroundDiagnosis({ incident }: { incident: Incident }) {
+  const status = incident.ai_diagnosis_status;
+  const diagnosis = incident.diagnosis;
+
+  if (status === 'pending') {
+    return (
+      <div className="rounded-lg border border-cyan-600/20 bg-cyan-950/20 p-4">
+        <p className="flex items-center gap-2 text-sm font-medium text-cyan-300">
+          <Loader2 className="h-4 w-4 animate-spin" />
+          Ollama analysis in progress
+        </p>
+        <p className="mt-1 text-xs leading-relaxed text-zinc-500">
+          The incident is already recorded. This panel updates automatically when the background diagnosis finishes.
+        </p>
+      </div>
+    );
+  }
+
+  if (status === 'unavailable') {
+    return (
+      <div className="rounded-lg border border-amber-600/20 bg-amber-950/20 p-4">
+        <p className="text-sm font-medium text-amber-300">Background AI analysis unavailable</p>
+        <p className="mt-1 text-xs leading-relaxed text-zinc-500">
+          The observed issue remains available below. Retry the full report after checking the configured provider.
+        </p>
+      </div>
+    );
+  }
+
+  if (status === 'complete' && diagnosis?.root_cause) {
+    const confidence = typeof diagnosis.confidence === 'number'
+      ? `${Math.round(diagnosis.confidence * 100)}% confidence`
+      : null;
+    return (
+      <div className="rounded-lg border border-cyan-600/20 bg-cyan-950/20 p-4 text-sm">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="flex items-center gap-2 font-medium text-cyan-300">
+            <BrainCircuit className="h-4 w-4" />
+            AI issue overview
+          </p>
+          <p className="text-xs text-zinc-500">
+            {[incident.ai_diagnosis_provider, incident.ai_diagnosis_model, confidence].filter(Boolean).join(' · ')}
+          </p>
+        </div>
+        <div className="mt-4 space-y-4">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wider text-zinc-500">Root cause</p>
+            <p className="mt-1 leading-relaxed text-zinc-200">{diagnosis.root_cause}</p>
+          </div>
+          {diagnosis.recommendation && (
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wider text-zinc-500">Recommended investigation</p>
+              <p className="mt-1 whitespace-pre-wrap leading-relaxed text-zinc-300">{diagnosis.recommendation}</p>
+            </div>
+          )}
+          <p className="border-t border-cyan-900/40 pt-3 text-xs text-zinc-600">
+            Advisory only — Nightwatch did not execute remediation.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  if (incident.ai_analysis) {
+    return (
+      <div className="rounded-lg border border-cyan-600/20 bg-cyan-950/20 p-4 text-sm leading-relaxed text-zinc-300">
+        {incident.ai_analysis}
+      </div>
+    );
+  }
+
+  return null;
+}
+
 export default function IncidentsPage() {
   const [search, setSearch] = useState('');
   const [severity, setSeverity] = useState('all');
   const [adapterFilter, setAdapterFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
   const [page, setPage] = useState(1);
-  const [selected, setSelected] = useState<Incident | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
 
   const { data: incidents, isLoading } = useIncidents({ limit: 100 });
   const {
@@ -62,6 +127,9 @@ export default function IncidentsPage() {
     data: reportData,
     reset: resetReport,
   } = useGenerateReport();
+  const selected = (incidents?.incidents ?? []).find(
+    (incident: Incident) => incident.id === selectedId,
+  ) ?? null;
 
   const adapterNames = Array.from(
     new Set((incidents?.incidents ?? []).map((incident: Incident) => incident.adapter)),
@@ -170,7 +238,7 @@ export default function IncidentsPage() {
                     key={inc.id}
                     onClick={() => {
                       resetReport();
-                      setSelected(inc);
+                      setSelectedId(inc.id);
                     }}
                     className="border-b border-zinc-800 hover:bg-zinc-900/40 cursor-pointer transition-colors"
                   >
@@ -245,7 +313,7 @@ export default function IncidentsPage() {
         open={!!selected}
         onOpenChange={() => {
           resetReport();
-          setSelected(null);
+          setSelectedId(null);
         }}
       >
         <SheetContent className="bg-zinc-950 border-zinc-800 text-white w-full sm:max-w-xl overflow-y-auto">
@@ -298,16 +366,7 @@ export default function IncidentsPage() {
                 </div>
               </div>
 
-              {selected.ai_analysis && (
-                <div>
-                  <p className="text-zinc-500 text-xs mb-2 flex items-center gap-1">
-                    ⚡ AI Root Cause Analysis
-                  </p>
-                  <div className="bg-red-950/30 border border-red-600/20 rounded-lg p-3 text-sm text-zinc-300 leading-relaxed">
-                    {selected.ai_analysis}
-                  </div>
-                </div>
-              )}
+              <BackgroundDiagnosis incident={selected} />
 
               {/* Timeline */}
               <div>

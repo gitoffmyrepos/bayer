@@ -310,7 +310,7 @@ async def lifespan(app: FastAPI):
     log.info("nightwatch_stopping")
     app.state.scheduler.stop()
     for engine in app.state.engines.values():
-        engine.stop()
+        await engine.stop()
         engine.adapter.cleanup()
     if app.state.k8s_event_watcher is not None:
         try:

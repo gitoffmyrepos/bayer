@@ -7,9 +7,9 @@ Flow per check cycle:
   1. adapter.collect_metrics()     → current health data
   2. adapter.collect_logs()        → recent error logs
   3. adapter.run_health_checks()   → list of HealthCheck results
-  4. If any check FAIL/WARN:       → llm.diagnose(metrics, logs, error)
-  5. If severity >= threshold:     → alert_manager.send_alert(diagnosis)
-  6. Persist incident to history
+  4. Persist incident to history
+  5. If any check FAIL/WARN:       → queue llm.diagnose(metrics, logs, error)
+  6. If severity >= threshold:     → alert_manager.send_alert()
 
 Author: Nova ⚡ | Nightwatch Platform
 """
@@ -19,6 +19,7 @@ import hashlib
 import json
 import time
 from collections import deque
+from contextlib import suppress
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -52,6 +53,8 @@ class Incident:
         metrics: dict,
         logs: list[str],
         diagnosis: Optional[dict] = None,
+        finding_signature: str = "",
+        diagnosis_status: str = "disabled",
     ):
         self.adapter_name = adapter_name
         self.title = title
@@ -60,6 +63,11 @@ class Incident:
         self.metrics = metrics
         self.logs = logs
         self.diagnosis = diagnosis or {}
+        self.finding_signature = finding_signature
+        self.diagnosis_status = diagnosis_status
+        self.diagnosis_provider = ""
+        self.diagnosis_model = ""
+        self.diagnosis_updated_at: Optional[datetime] = None
         self.started_at = datetime.now(timezone.utc)
         identity = "|".join(
             [
@@ -108,6 +116,12 @@ class Incident:
             "resolved_at": self.resolved_at.isoformat() if self.resolved_at else None,
             "duration_seconds": self.duration_seconds,
             "diagnosis": self.diagnosis,
+            "ai_diagnosis_status": self.diagnosis_status,
+            "ai_diagnosis_provider": self.diagnosis_provider,
+            "ai_diagnosis_model": self.diagnosis_model,
+            "ai_diagnosis_updated_at": (
+                self.diagnosis_updated_at.isoformat() if self.diagnosis_updated_at else None
+            ),
             # UI reads ai_analysis directly
             "ai_analysis": (
                 self.diagnosis.get("root_cause", "") +
@@ -197,6 +211,10 @@ class NightwatchEngine:
         self._last_ai_signature = ""
         self._last_ai_attempt = 0.0
         self._last_ai_diagnosis: dict = {}
+        self._ai_diagnosis_queue: dict[
+            str, tuple[dict, list[str], list[HealthCheck]]
+        ] = {}
+        self._ai_diagnosis_task: Optional[asyncio.Task] = None
 
         # Dedup map for code-analyzer / remediation Discord alerts.
         # Key: f"{namespace}/{pod}/{error_signature}" → last_sent_epoch_seconds
@@ -234,8 +252,14 @@ class NightwatchEngine:
             sleep_time = max(0, self.check_interval - elapsed)
             await asyncio.sleep(sleep_time)
 
-    def stop(self) -> None:
+    async def stop(self) -> None:
         self._is_running = False
+        self._ai_diagnosis_queue.clear()
+        if self._ai_diagnosis_task and not self._ai_diagnosis_task.done():
+            self._ai_diagnosis_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await self._ai_diagnosis_task
+        self._ai_diagnosis_task = None
         log.info("engine_stopped", application=self.adapter.application_name)
 
     # ─── Check Cycle ──────────────────────────────────────────────────────────
@@ -247,9 +271,9 @@ class NightwatchEngine:
         Steps:
             1. Collect metrics and logs from the adapter
             2. Run all health checks
-            3. If unhealthy: AI diagnosis
-            4. If critical/high: send alert
-            5. Record incident
+            3. If unhealthy: record incident
+            4. Queue background AI diagnosis
+            5. If critical/high: send alert
         """
         self._check_count += 1
         app_name = self.adapter.application_name
@@ -284,7 +308,8 @@ class NightwatchEngine:
                 self._last_status = status
                 return status
 
-            # Step 3: Something is wrong — AI diagnosis
+            # Step 3: Something is wrong. Persist it before invoking the LLM so
+            # provider latency cannot hide incidents or block monitoring.
             self._consecutive_failures += 1
             severity = self._determine_severity(failing, critical)
 
@@ -296,12 +321,9 @@ class NightwatchEngine:
                 severity=severity,
             )
 
-            diagnosis = {}
-            if self.enable_ai_diagnosis:
-                diagnosis = await self._run_ai_diagnosis(metrics, logs, failing)
-
             # Step 4: Create incident
             title = self._build_incident_title(failing)
+            finding_signature = self._finding_signature(failing)
             incident = Incident(
                 adapter_name=app_name,
                 title=title,
@@ -309,9 +331,13 @@ class NightwatchEngine:
                 failing_checks=failing,
                 metrics=metrics,
                 logs=logs,
-                diagnosis=diagnosis,
+                finding_signature=finding_signature,
+                diagnosis_status="pending" if self.enable_ai_diagnosis else "disabled",
             )
             self._incidents.append(incident)
+
+            if self.enable_ai_diagnosis:
+                self._queue_ai_diagnosis(incident, metrics, logs, failing)
 
             # Step 5: Auto-remediation (if enabled)
             remediation_result = None
@@ -347,14 +373,8 @@ class NightwatchEngine:
 
     # ─── AI Diagnosis ────────────────────────────────────────────────────────
 
-    async def _run_ai_diagnosis(
-        self, metrics: dict, logs: list[str], failing: list[HealthCheck]
-    ) -> dict:
-        """Run AI root cause analysis on failing checks."""
-        error_summary = "\n".join(
-            f"- {c.name}: {c.status.value} — {c.message}"
-            for c in failing
-        )
+    @staticmethod
+    def _finding_signature(failing: list[HealthCheck]) -> str:
         signature_payload = [
             {
                 "name": check.name,
@@ -364,19 +384,90 @@ class NightwatchEngine:
             }
             for check in failing
         ]
-        signature = hashlib.sha256(
+        return hashlib.sha256(
             json.dumps(signature_payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
         ).hexdigest()
+
+    def _queue_ai_diagnosis(
+        self,
+        incident: Incident,
+        metrics: dict,
+        logs: list[str],
+        failing: list[HealthCheck],
+    ) -> None:
+        """Queue one diagnosis per finding signature without blocking collection."""
+        self._ai_diagnosis_queue[incident.finding_signature] = (metrics, logs, failing)
+        if self._ai_diagnosis_task is None or self._ai_diagnosis_task.done():
+            self._ai_diagnosis_task = asyncio.create_task(
+                self._process_ai_diagnosis_queue(),
+                name=f"nightwatch-ai-diagnosis-{self.adapter.application_name}",
+            )
+
+    async def _process_ai_diagnosis_queue(self) -> None:
+        """Serialize diagnoses and enrich every stored matching incident."""
+        try:
+            while self._ai_diagnosis_queue:
+                signature = next(iter(self._ai_diagnosis_queue))
+                metrics, logs, failing = self._ai_diagnosis_queue.pop(signature)
+                diagnosis = await self._run_ai_diagnosis(
+                    metrics,
+                    logs,
+                    failing,
+                    signature=signature,
+                )
+                updated_at = datetime.now(timezone.utc)
+                for incident in self._incidents:
+                    if incident.finding_signature != signature:
+                        continue
+                    if diagnosis:
+                        incident.diagnosis = dict(diagnosis)
+                        incident.diagnosis_status = "complete"
+                        incident.diagnosis_provider = getattr(self.llm, "provider", "")
+                        incident.diagnosis_model = getattr(self.llm, "model", "")
+                        incident.diagnosis_updated_at = updated_at
+                    elif incident.diagnosis_status == "pending":
+                        incident.diagnosis_status = "unavailable"
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:  # noqa: BLE001
+            log.error(
+                "ai_diagnosis_worker_failed",
+                application=self.adapter.application_name,
+                error=str(exc),
+            )
+        finally:
+            self._ai_diagnosis_task = None
+
+    async def wait_for_ai_diagnosis(self) -> None:
+        """Wait for the active diagnosis batch during tests or graceful shutdown."""
+        task = self._ai_diagnosis_task
+        if task is not None:
+            await task
+
+    async def _run_ai_diagnosis(
+        self,
+        metrics: dict,
+        logs: list[str],
+        failing: list[HealthCheck],
+        signature: Optional[str] = None,
+    ) -> dict:
+        """Run AI root cause analysis on failing checks."""
+        error_summary = "\n".join(
+            f"- {c.name}: {c.status.value} — {c.message}"
+            for c in failing
+        )
+        signature = signature or self._finding_signature(failing)
         now = time.monotonic()
         elapsed = now - self._last_ai_attempt
         if self._last_ai_attempt and elapsed < self._ai_diagnosis_min_interval_seconds:
+            cached = signature == self._last_ai_signature and bool(self._last_ai_diagnosis)
             log.info(
                 "ai_diagnosis_rate_limited",
                 application=self.adapter.application_name,
-                cached=bool(self._last_ai_diagnosis),
+                cached=cached,
                 retry_after_seconds=max(0, int(self._ai_diagnosis_min_interval_seconds - elapsed)),
             )
-            return dict(self._last_ai_diagnosis)
+            return dict(self._last_ai_diagnosis) if cached else {}
         if signature == self._last_ai_signature:
             wait_seconds = (
                 self._ai_diagnosis_refresh_seconds

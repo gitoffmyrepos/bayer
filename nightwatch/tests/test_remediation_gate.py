@@ -1,3 +1,5 @@
+import asyncio
+
 import pytest
 from types import SimpleNamespace
 
@@ -140,10 +142,61 @@ async def test_unchanged_findings_reuse_ai_diagnosis(monkeypatch):
     )
 
     first = await engine.run_check_cycle()
+    await engine.wait_for_ai_diagnosis()
     second = await engine.run_check_cycle()
+    await engine.wait_for_ai_diagnosis()
 
     assert llm.calls == 1
-    assert first["active_incident"]["diagnosis"] == second["active_incident"]["diagnosis"]
+    incidents = engine.get_incidents(limit=2)
+    assert first["active_incident"]["ai_diagnosis_status"] == "pending"
+    assert second["active_incident"]["ai_diagnosis_status"] == "pending"
+    assert all(incident["ai_diagnosis_status"] == "complete" for incident in incidents)
+    assert incidents[0]["diagnosis"] == incidents[1]["diagnosis"]
+    await engine.stop()
+
+
+@pytest.mark.asyncio
+async def test_background_diagnosis_never_blocks_incident_collection(monkeypatch):
+    monkeypatch.delenv("REMEDIATION_ENABLED", raising=False)
+    engine = NightwatchEngine(
+        adapter=_UnknownAdapter({}),
+        llm_client=_UnusedLLM(),
+        config={
+            "nightwatch": {"enable_ai_diagnosis": True},
+            "healing": {"mode": "observe_only"},
+            "alerting": {},
+        },
+    )
+    diagnosis_started = asyncio.Event()
+    release_diagnosis = asyncio.Event()
+
+    async def slow_diagnosis(*_args, **_kwargs):
+        diagnosis_started.set()
+        await release_diagnosis.wait()
+        return {
+            "root_cause": "observed API collection failure",
+            "severity": "high",
+            "recommendation": "inspect the reported API error",
+            "auto_fix_possible": False,
+            "auto_fix_command": None,
+            "confidence": 0.9,
+        }
+
+    engine._run_ai_diagnosis = slow_diagnosis
+
+    status = await engine.run_check_cycle()
+
+    assert status["active_incident"] is not None
+    assert status["active_incident"]["ai_diagnosis_status"] == "pending"
+    await diagnosis_started.wait()
+    release_diagnosis.set()
+    await engine.wait_for_ai_diagnosis()
+
+    enriched = engine.get_incidents(limit=1)[0]
+    assert enriched["ai_diagnosis_status"] == "complete"
+    assert enriched["diagnosis"]["root_cause"] == "observed API collection failure"
+    assert enriched["ai_diagnosis_model"] == "unused"
+    await engine.stop()
 
 
 @pytest.mark.asyncio

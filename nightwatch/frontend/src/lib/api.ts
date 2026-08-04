@@ -31,7 +31,18 @@ export type NightwatchIncident = {
   resolved_at?: string | null;
   status: string;
   ai_analysis?: string;
-  diagnosis?: Record<string, unknown>;
+  ai_diagnosis_status?: 'disabled' | 'pending' | 'complete' | 'unavailable';
+  ai_diagnosis_provider?: string;
+  ai_diagnosis_model?: string;
+  ai_diagnosis_updated_at?: string | null;
+  diagnosis?: {
+    root_cause?: string;
+    severity?: string;
+    recommendation?: string;
+    confidence?: number;
+    auto_fix_possible?: boolean;
+    auto_fix_command?: string | null;
+  };
 };
 
 type HealthResponse = {

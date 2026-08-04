@@ -26,7 +26,9 @@ export const useIncidents = (params?: {
   useQuery({
     queryKey: ['incidents', params],
     queryFn: () => nightwatchApi.getIncidents(params),
-    refetchInterval: 60000,
+    // Background Ollama diagnosis enriches an already-recorded incident.
+    // Poll frequently enough for an open issue sheet to update in place.
+    refetchInterval: 15000,
   });
 
 export const useAdapters = () =>

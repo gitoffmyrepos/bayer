@@ -227,6 +227,44 @@ export default function AiAnalystPage() {
                 <article className="whitespace-pre-wrap text-sm leading-7 text-zinc-300">
                   {reportMutation.data.report}
                 </article>
+              ) : selected?.ai_diagnosis_status === 'pending' ? (
+                <div className="flex min-h-64 flex-col items-center justify-center text-center">
+                  <Loader2 className="h-7 w-7 animate-spin text-cyan-400" />
+                  <p className="mt-3 text-sm text-zinc-400">Background Ollama analysis in progress…</p>
+                  <p className="mt-1 max-w-sm text-xs leading-relaxed text-zinc-600">
+                    The issue is already visible. Nightwatch will attach the diagnosis when it completes.
+                  </p>
+                </div>
+              ) : selected?.diagnosis?.root_cause ? (
+                <div className="space-y-5">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="text-xs font-semibold uppercase tracking-wider text-cyan-400">
+                      Background issue overview
+                    </p>
+                    <p className="text-xs text-zinc-600">
+                      {[selected.ai_diagnosis_provider, selected.ai_diagnosis_model].filter(Boolean).join(' · ')}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-wider text-zinc-600">Root cause</p>
+                    <p className="mt-2 whitespace-pre-wrap text-sm leading-7 text-zinc-300">
+                      {selected.diagnosis.root_cause}
+                    </p>
+                  </div>
+                  {selected.diagnosis.recommendation && (
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-wider text-zinc-600">
+                        Recommended investigation
+                      </p>
+                      <p className="mt-2 whitespace-pre-wrap text-sm leading-7 text-zinc-400">
+                        {selected.diagnosis.recommendation}
+                      </p>
+                    </div>
+                  )}
+                  <p className="border-t border-zinc-900 pt-4 text-xs text-zinc-600">
+                    Advisory only — remediation is disabled and no changes were executed.
+                  </p>
+                </div>
               ) : selected?.ai_analysis ? (
                 <div>
                   <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-zinc-600">

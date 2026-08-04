@@ -747,12 +747,14 @@ curl -fsS 'http://localhost:8080/incidents?adapter=checkout-production'
 1. The adapter collects bounded evidence.
 2. `run_health_checks()` produces `OK`, `WARN`, `FAIL`, or `UNKNOWN` from explicit
    code and thresholds.
-3. WARN/FAIL checks create or update incidents through the engine's deduplication
-   lifecycle.
-4. The evidence and architecture description may be passed to the configured
-   Ollama, OpenAI, Anthropic, or DeepSeek provider for a root-cause explanation
-   and operator recommendation. Unchanged findings reuse their last successful
-   diagnosis so scheduled checks cannot flood the provider queue.
+3. WARN/FAIL checks are recorded immediately through the engine's incident
+   lifecycle; provider latency never hides the issue from the API or frontend.
+4. A serialized background worker passes the bounded evidence and architecture
+   description to the configured Ollama, OpenAI, Anthropic, or DeepSeek provider.
+   The stored incident is enriched with diagnosis status, root cause, provider,
+   model, confidence, and operator guidance when analysis completes. Unchanged
+   findings reuse their last successful diagnosis so scheduled checks cannot
+   flood the provider queue.
 5. Configured alert channels receive eligible severities. An alerting failure does
    not turn the underlying finding healthy.
 6. With remediation disabled, recommendations remain text. No suggested command is
@@ -862,6 +864,9 @@ Ensure the configured model exists and the URL is reachable from the API contain
 If the provider returns `maximum pending requests exceeded`, inspect whether
 unchanged scheduled findings are being re-analyzed and confirm
 `ai_diagnosis_refresh_seconds` and `ai_diagnosis_retry_seconds` are configured.
+Background diagnosis is non-blocking: incidents first appear with
+`ai_diagnosis_status=pending`, then change to `complete` or `unavailable`. The
+Incidents and AI Analyst screens poll for that enrichment automatically.
 Nightwatch returns HTTP 503 for temporary provider failure instead of hiding it as
 an internal server error. Deterministic findings remain valid while the LLM is
 offline.
