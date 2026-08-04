@@ -23,6 +23,7 @@ def test_ollama_uses_generate_contract():
             "model": "qwen3:14b",
             "prompt": "explain evidence",
             "stream": False,
+            "think": False,
             "options": {"temperature": 0.1, "num_predict": 2048},
         },
     )

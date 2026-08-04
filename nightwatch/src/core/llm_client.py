@@ -342,6 +342,10 @@ Be specific about any issues found."""
                 "model": self.model,
                 "prompt": prompt,
                 "stream": False,
+                # Operational reports must complete within an interactive
+                # request. Qwen reasoning models otherwise spend the bounded
+                # output budget on hidden chain-of-thought before responding.
+                "think": False,
                 "options": {
                     "temperature": self.temperature,
                     "num_predict": self.max_tokens,
