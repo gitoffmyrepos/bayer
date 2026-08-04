@@ -200,6 +200,73 @@ async def test_background_diagnosis_never_blocks_incident_collection(monkeypatch
 
 
 @pytest.mark.asyncio
+async def test_changed_findings_bypass_unchanged_signature_cooldown(monkeypatch):
+    monkeypatch.delenv("REMEDIATION_ENABLED", raising=False)
+
+    class ChangingAdapter(_UnknownAdapter):
+        message = "EKS inventory unavailable"
+
+        def run_health_checks(self):
+            return [
+                HealthCheck(
+                    name="aws_eks_collection",
+                    status=CheckStatus.UNKNOWN,
+                    message=self.message,
+                    component="AWS Provider",
+                )
+            ]
+
+    class CountingLLM:
+        provider = "ollama"
+        model = "qwen3:4b"
+
+        def __init__(self):
+            self.calls = 0
+
+        def diagnose(self, **_kwargs):
+            self.calls += 1
+            return {
+                "root_cause": f"analysis {self.calls}",
+                "severity": "high",
+                "recommendation": "inspect the newly observed failure",
+                "auto_fix_possible": False,
+                "auto_fix_command": None,
+                "confidence": 0.9,
+            }
+
+    adapter = ChangingAdapter({})
+    llm = CountingLLM()
+    engine = NightwatchEngine(
+        adapter=adapter,
+        llm_client=llm,
+        config={
+            "nightwatch": {
+                "enable_ai_diagnosis": True,
+                "ai_diagnosis_min_interval_seconds": 900,
+                "ai_diagnosis_refresh_seconds": 3600,
+            },
+            "healing": {"mode": "observe_only"},
+            "alerting": {},
+        },
+    )
+
+    await engine.run_check_cycle()
+    await engine.wait_for_ai_diagnosis()
+    adapter.message = "EKS authorization failed"
+    await engine.run_check_cycle()
+    await engine.wait_for_ai_diagnosis()
+
+    incidents = engine.get_incidents(limit=2)
+    assert llm.calls == 2
+    assert all(incident["ai_diagnosis_status"] == "complete" for incident in incidents)
+    assert {incident["diagnosis"]["root_cause"] for incident in incidents} == {
+        "analysis 1",
+        "analysis 2",
+    }
+    await engine.stop()
+
+
+@pytest.mark.asyncio
 async def test_report_accepts_adapter_application_name():
     class ReportEngine:
         adapter = SimpleNamespace(application_name="AWS Infrastructure Estate")

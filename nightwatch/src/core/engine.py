@@ -459,8 +459,13 @@ class NightwatchEngine:
         signature = signature or self._finding_signature(failing)
         now = time.monotonic()
         elapsed = now - self._last_ai_attempt
-        if self._last_ai_attempt and elapsed < self._ai_diagnosis_min_interval_seconds:
-            cached = signature == self._last_ai_signature and bool(self._last_ai_diagnosis)
+        same_signature = signature == self._last_ai_signature
+        if (
+            same_signature
+            and self._last_ai_attempt
+            and elapsed < self._ai_diagnosis_min_interval_seconds
+        ):
+            cached = bool(self._last_ai_diagnosis)
             log.info(
                 "ai_diagnosis_rate_limited",
                 application=self.adapter.application_name,
@@ -468,7 +473,7 @@ class NightwatchEngine:
                 retry_after_seconds=max(0, int(self._ai_diagnosis_min_interval_seconds - elapsed)),
             )
             return dict(self._last_ai_diagnosis) if cached else {}
-        if signature == self._last_ai_signature:
+        if same_signature:
             wait_seconds = (
                 self._ai_diagnosis_refresh_seconds
                 if self._last_ai_diagnosis
