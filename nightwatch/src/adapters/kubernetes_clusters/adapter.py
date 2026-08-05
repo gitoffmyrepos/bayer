@@ -604,6 +604,7 @@ class KubernetesClustersAdapter(BaseNightwatchAdapter):
                 check = self._unknown
             metadata = {**cronjob, "resource_name": cronjob["name"]}
             metadata.pop("name", None)
+            detail = str(metadata.pop("message"))
             checks.append(
                 check(
                     "kubernetes_"
@@ -612,7 +613,7 @@ class KubernetesClustersAdapter(BaseNightwatchAdapter):
                     f"{_check_id(cronjob['name'])}_latest_run",
                     f"CronJob {cronjob['namespace']}/{cronjob['name']} latest Job "
                     f"{cronjob['latest_job'] or 'not observed'} is "
-                    f"{cronjob['latest_job_status']}: {cronjob['message']}",
+                    f"{cronjob['latest_job_status']}: {detail}",
                     component="Kubernetes CronJob",
                     **metadata,
                 )

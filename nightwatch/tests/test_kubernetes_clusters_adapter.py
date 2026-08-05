@@ -201,6 +201,41 @@ def test_cronjob_status_survives_zero_job_history_retention():
     assert records[0]["reason"] == "LastScheduledRunSucceeded"
 
 
+def test_cronjob_evidence_builds_health_check_without_argument_collisions():
+    adapter = KubernetesClustersAdapter({})
+    adapter._snapshot = {
+        "clusters": [],
+        "nodes": [],
+        "deployments": [],
+        "pods": [],
+        "cronjobs": [
+            {
+                "cluster": "production",
+                "namespace": "operations",
+                "name": "nightly-check",
+                "schedule": "0 0 * * *",
+                "suspended": False,
+                "latest_job": "nightly-check-1",
+                "latest_job_status": "failed",
+                "reason": "BackoffLimitExceeded",
+                "message": "Latest owned Job failed",
+                "last_run_at": "2026-08-05T00:00:00+00:00",
+                "last_scheduled_at": "2026-08-05T00:00:00+00:00",
+                "last_successful_at": None,
+                "status": "unhealthy",
+                "observed_at": "2026-08-05T00:01:00+00:00",
+            }
+        ],
+    }
+
+    checks = adapter.run_health_checks()
+
+    assert len(checks) == 1
+    assert checks[0].status == CheckStatus.FAIL
+    assert "Latest owned Job failed" in checks[0].message
+    assert "message" not in checks[0].metadata
+
+
 def test_discovers_and_connects_every_kubeconfig_context(monkeypatch, tmp_path):
     kubeconfig = tmp_path / "clusters.yaml"
     kubeconfig.write_text("apiVersion: v1\nkind: Config\n")
