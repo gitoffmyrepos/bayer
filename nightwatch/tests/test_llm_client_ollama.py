@@ -56,4 +56,6 @@ def test_ollama_diagnosis_enforces_structured_output():
 
     payload = context.__enter__.return_value.post.call_args.kwargs["json"]
     assert payload["format"] == NightwatchLLMClient.DIAGNOSIS_SCHEMA
+    assert "Root cause not established from available evidence" in payload["prompt"]
+    assert "set auto_fix_possible to false" in payload["prompt"]
     assert result == diagnosis

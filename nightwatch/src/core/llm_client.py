@@ -155,6 +155,13 @@ RECENT ERROR LOGS (last 50 lines):
 ERROR/TRIGGER:
 {error}
 
+EVIDENCE RULES:
+- Use only facts explicitly present in CURRENT METRICS, RECENT ERROR LOGS, and ERROR/TRIGGER.
+- Do not invent dependencies, node types, resource exhaustion, network failures, configuration errors, or application behavior that the evidence does not show.
+- If the evidence establishes only a symptom, say "Root cause not established from available evidence" and describe the observed symptom precisely.
+- Recommendations must be read-only investigation steps tied to the evidence. Do not claim remediation was executed.
+- This diagnosis path is advisory-only: set auto_fix_possible to false and auto_fix_command to null.
+
 Perform root cause analysis and respond with ONLY valid JSON in this exact format:
 {{
   "root_cause": "Brief description of what caused this issue",
