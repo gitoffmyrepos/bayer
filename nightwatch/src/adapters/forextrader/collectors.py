@@ -53,6 +53,12 @@ def collect_k8s_pod_status(k8s_namespace: str, kubeconfig_path: Optional[str] = 
 
         pod_data = []
         for pod in pods.items:
+            phase = pod.status.phase or "Unknown"
+            if (
+                phase in {"Succeeded", "Failed"}
+                or getattr(pod.metadata, "deletion_timestamp", None) is not None
+            ):
+                continue
             containers_ready = 0
             containers_total = len(pod.spec.containers)
             total_restarts = 0
@@ -65,7 +71,7 @@ def collect_k8s_pod_status(k8s_namespace: str, kubeconfig_path: Optional[str] = 
 
             pod_data.append({
                 "name": pod.metadata.name,
-                "phase": pod.status.phase or "Unknown",
+                "phase": phase,
                 "ready": f"{containers_ready}/{containers_total}",
                 "restarts": total_restarts,
                 "node": pod.spec.node_name,
@@ -239,13 +245,24 @@ def collect_k8s_namespace_summary(namespaces: list[str],
         for ns in namespaces:
             try:
                 pods = v1.list_namespaced_pod(namespace=ns)
-                total = len(pods.items)
-                running = sum(1 for p in pods.items if p.status.phase == "Running")
-                failed = sum(1 for p in pods.items if p.status.phase == "Failed")
+                current_pods = [
+                    pod
+                    for pod in pods.items
+                    if pod.status.phase not in {"Succeeded", "Failed"}
+                    and getattr(pod.metadata, "deletion_timestamp", None) is None
+                ]
+                total = len(current_pods)
+                running = sum(
+                    1 for pod in current_pods if pod.status.phase == "Running"
+                )
+                failed = 0
                 crashlooping = sum(
-                    1 for p in pods.items
-                    if p.status.container_statuses and
-                    any(cs.restart_count >= 5 for cs in p.status.container_statuses)
+                    1 for pod in current_pods
+                    if pod.status.container_statuses and
+                    any(
+                        cs.restart_count >= 5
+                        for cs in pod.status.container_statuses
+                    )
                 )
                 result[ns] = {"total": total, "running": running,
                               "failed": failed, "crashlooping": crashlooping}

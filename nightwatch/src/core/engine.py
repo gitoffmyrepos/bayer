@@ -54,6 +54,7 @@ class Incident:
         logs: list[str],
         diagnosis: Optional[dict] = None,
         finding_signature: str = "",
+        issue_key: str = "",
         diagnosis_status: str = "disabled",
     ):
         self.adapter_name = adapter_name
@@ -64,6 +65,7 @@ class Incident:
         self.logs = logs
         self.diagnosis = diagnosis or {}
         self.finding_signature = finding_signature
+        self.issue_key = issue_key
         self.diagnosis_status = diagnosis_status
         self.diagnosis_provider = ""
         self.diagnosis_model = ""
@@ -101,6 +103,7 @@ class Incident:
             "adapter": self.adapter_name,
             "adapter_name": self.adapter_name,
             "title": self.title,
+            "issue_key": self.issue_key,
             "severity": self.severity,
             # UI reads these fields directly in IncidentRow
             "component": component,
@@ -203,14 +206,15 @@ class NightwatchEngine:
 
         # State
         self._incidents: deque[Incident] = deque(maxlen=max_incidents)
+        self._active_incidents: dict[str, Incident] = {}
         self._last_check: Optional[datetime] = None
         self._last_status: Optional[dict] = None
         self._is_running = False
         self._check_count = 0
         self._consecutive_failures = 0
-        self._last_ai_signature = ""
-        self._last_ai_attempt = 0.0
-        self._last_ai_diagnosis: dict = {}
+        self._ai_diagnosis_attempts: dict[str, float] = {}
+        self._ai_diagnosis_cache: dict[str, dict] = {}
+        self._max_ai_cache_entries = max_incidents
         self._ai_diagnosis_queue: dict[
             str, tuple[dict, list[str], list[HealthCheck]]
         ] = {}
@@ -302,6 +306,7 @@ class NightwatchEngine:
             self._last_check = datetime.now(timezone.utc)
 
             if healthy:
+                self._resolve_recovered_incidents(set())
                 self._consecutive_failures = 0
                 log.info("check_cycle_healthy", cycle=cycle_id, checks=len(health_checks))
                 status = self._build_status(health_checks, metrics, "healthy", None)
@@ -321,27 +326,23 @@ class NightwatchEngine:
                 severity=severity,
             )
 
-            # Step 4: Create incident
-            title = self._build_incident_title(failing)
-            finding_signature = self._finding_signature(failing)
-            incident = Incident(
-                adapter_name=app_name,
-                title=title,
-                severity=severity,
-                failing_checks=failing,
-                metrics=metrics,
-                logs=logs,
-                finding_signature=finding_signature,
-                diagnosis_status="pending" if self.enable_ai_diagnosis else "disabled",
+            # Step 4: Maintain one active incident per concrete health check.
+            # Aggregate incidents made unrelated resources share one LLM prompt
+            # and produced repeated generic overviews. Stable checks now retain
+            # one active incident; changed evidence closes the prior event and
+            # starts a separately diagnosed incident.
+            active_incidents, changed_incidents = self._sync_issue_incidents(
+                failing, metrics, logs
             )
-            self._incidents.append(incident)
-
-            if self.enable_ai_diagnosis:
-                self._queue_ai_diagnosis(incident, metrics, logs, failing)
+            incident = self._primary_incident(active_incidents)
 
             # Step 5: Auto-remediation (if enabled)
             remediation_result = None
-            if REMEDIATION_AVAILABLE and getattr(self, '_remediator', None):
+            if (
+                incident is not None
+                and REMEDIATION_AVAILABLE
+                and getattr(self, '_remediator', None)
+            ):
                 remediation_result = await self._run_auto_remediation(incident, failing)
                 if remediation_result:
                     incident.diagnosis["remediation"] = {
@@ -351,9 +352,10 @@ class NightwatchEngine:
                     }
 
             # Step 6: Send alert if severity warrants it
-            if severity in self.alert_severities:
-                await self._send_incident_alert(incident)
-                incident.alert_sent = True
+            for changed_incident in changed_incidents:
+                if changed_incident.severity in self.alert_severities:
+                    await self._send_incident_alert(changed_incident)
+                    changed_incident.alert_sent = True
 
             overall = (
                 "degraded"
@@ -370,6 +372,119 @@ class NightwatchEngine:
             log.error("check_cycle_error", cycle=cycle_id, error=str(e))
             self._consecutive_failures += 1
             return {"status": "error", "error": str(e), "cycle": cycle_id}
+
+    @staticmethod
+    def _issue_key(check: HealthCheck) -> str:
+        return f"{check.component}|{check.name}"
+
+    @staticmethod
+    def _incident_metrics(check: HealthCheck, observed_metrics: dict) -> dict:
+        """Build issue-scoped evidence so unrelated failures cannot bias the LLM."""
+        return {
+            "finding": check.to_dict(),
+            "resource_evidence": dict(check.metadata),
+            "observation_context": {
+                "available_metric_groups": sorted(observed_metrics),
+            },
+        }
+
+    @staticmethod
+    def _incident_logs(check: HealthCheck, observed_logs: list[str]) -> list[str]:
+        """Keep only log lines that identify the affected resource."""
+        identifiers = {
+            str(check.metadata.get("resource_name", "")).strip(),
+            str(check.metadata.get("pod", "")).strip(),
+        }
+        for key in ("pods", "failed_pods"):
+            for item in check.metadata.get(key, []) or []:
+                value = item.get("name") if isinstance(item, dict) else item
+                if value:
+                    identifiers.add(str(value))
+        identifiers.discard("")
+        if not identifiers:
+            return []
+        return [
+            line
+            for line in observed_logs
+            if any(identifier in line for identifier in identifiers)
+        ]
+
+    def _resolve_recovered_incidents(self, active_issue_keys: set[str]) -> None:
+        resolved_at = datetime.now(timezone.utc)
+        for issue_key, incident in list(self._active_incidents.items()):
+            if issue_key in active_issue_keys:
+                continue
+            incident.resolved_at = resolved_at
+            del self._active_incidents[issue_key]
+
+    def _sync_issue_incidents(
+        self,
+        failing: list[HealthCheck],
+        metrics: dict,
+        logs: list[str],
+    ) -> tuple[list[Incident], list[Incident]]:
+        active_issue_keys = {self._issue_key(check) for check in failing}
+        self._resolve_recovered_incidents(active_issue_keys)
+        active: list[Incident] = []
+        changed: list[Incident] = []
+
+        for check in failing:
+            issue_key = self._issue_key(check)
+            finding_signature = self._finding_signature([check])
+            incident_metrics = self._incident_metrics(check, metrics)
+            incident_logs = self._incident_logs(check, logs)
+            current = self._active_incidents.get(issue_key)
+
+            if current and current.finding_signature == finding_signature:
+                current.failing_checks = [check]
+                current.metrics = incident_metrics
+                current.logs = incident_logs
+                active.append(current)
+                if (
+                    self.enable_ai_diagnosis
+                    and current.diagnosis_status == "unavailable"
+                ):
+                    self._queue_ai_diagnosis(
+                        current, incident_metrics, incident_logs, [check]
+                    )
+                continue
+
+            if current:
+                current.resolved_at = datetime.now(timezone.utc)
+
+            critical = [check] if check.status == CheckStatus.FAIL else []
+            incident = Incident(
+                adapter_name=self.adapter.application_name,
+                title=self._build_incident_title([check]),
+                severity=self._determine_severity([check], critical),
+                failing_checks=[check],
+                metrics=incident_metrics,
+                logs=incident_logs,
+                finding_signature=finding_signature,
+                issue_key=issue_key,
+                diagnosis_status=(
+                    "pending" if self.enable_ai_diagnosis else "disabled"
+                ),
+            )
+            self._incidents.append(incident)
+            self._active_incidents[issue_key] = incident
+            active.append(incident)
+            changed.append(incident)
+            if self.enable_ai_diagnosis:
+                self._queue_ai_diagnosis(
+                    incident, incident_metrics, incident_logs, [check]
+                )
+
+        return active, changed
+
+    @staticmethod
+    def _primary_incident(incidents: list[Incident]) -> Optional[Incident]:
+        severity_order = {"critical": 0, "high": 1, "medium": 2, "low": 3}
+        return min(
+            incidents,
+            key=lambda incident: severity_order.get(incident.severity, 4),
+            default=None,
+        )
 
     # ─── AI Diagnosis ────────────────────────────────────────────────────────
 
@@ -458,38 +573,35 @@ class NightwatchEngine:
         )
         signature = signature or self._finding_signature(failing)
         now = time.monotonic()
-        elapsed = now - self._last_ai_attempt
-        same_signature = signature == self._last_ai_signature
-        if (
-            same_signature
-            and self._last_ai_attempt
-            and elapsed < self._ai_diagnosis_min_interval_seconds
-        ):
-            cached = bool(self._last_ai_diagnosis)
-            log.info(
-                "ai_diagnosis_rate_limited",
-                application=self.adapter.application_name,
-                cached=cached,
-                retry_after_seconds=max(0, int(self._ai_diagnosis_min_interval_seconds - elapsed)),
-            )
-            return dict(self._last_ai_diagnosis) if cached else {}
-        if same_signature:
-            wait_seconds = (
+        last_attempt = self._ai_diagnosis_attempts.get(signature, 0.0)
+        cached_diagnosis = self._ai_diagnosis_cache.get(signature, {})
+        elapsed = now - last_attempt
+        wait_seconds = max(
+            self._ai_diagnosis_min_interval_seconds,
+            (
                 self._ai_diagnosis_refresh_seconds
-                if self._last_ai_diagnosis
+                if cached_diagnosis
                 else self._ai_diagnosis_retry_seconds
+            ),
+        )
+        if last_attempt and elapsed < wait_seconds:
+            log.info(
+                "ai_diagnosis_reused" if cached_diagnosis else "ai_diagnosis_rate_limited",
+                application=self.adapter.application_name,
+                signature=signature[:12],
+                cached=bool(cached_diagnosis),
+                retry_after_seconds=max(0, int(wait_seconds - elapsed)),
             )
-            if elapsed < wait_seconds:
-                log.info(
-                    "ai_diagnosis_reused",
-                    application=self.adapter.application_name,
-                    cached=bool(self._last_ai_diagnosis),
-                    retry_after_seconds=max(0, int(wait_seconds - elapsed)),
-                )
-                return dict(self._last_ai_diagnosis)
+            return dict(cached_diagnosis)
 
-        self._last_ai_signature = signature
-        self._last_ai_attempt = now
+        self._ai_diagnosis_attempts[signature] = now
+        while len(self._ai_diagnosis_attempts) > self._max_ai_cache_entries:
+            oldest_signature = min(
+                self._ai_diagnosis_attempts,
+                key=self._ai_diagnosis_attempts.get,
+            )
+            self._ai_diagnosis_attempts.pop(oldest_signature, None)
+            self._ai_diagnosis_cache.pop(oldest_signature, None)
         try:
             diagnosis = await asyncio.get_event_loop().run_in_executor(
                 None,
@@ -500,20 +612,26 @@ class NightwatchEngine:
                     architecture=self.adapter.describe_architecture(),
                 ),
             )
-            self._last_ai_diagnosis = dict(diagnosis)
-            log.info("ai_diagnosis_complete", severity=diagnosis.get("severity"), confidence=diagnosis.get("confidence"))
+            self._ai_diagnosis_cache[signature] = dict(diagnosis)
+            log.info(
+                "ai_diagnosis_complete",
+                signature=signature[:12],
+                severity=diagnosis.get("severity"),
+                confidence=diagnosis.get("confidence"),
+            )
             return diagnosis
         except LLMError as e:
-            log.warning("ai_diagnosis_failed", error=str(e))
-            self._last_ai_diagnosis = {}
+            log.warning(
+                "ai_diagnosis_failed", signature=signature[:12], error=str(e)
+            )
+            self._ai_diagnosis_cache.pop(signature, None)
             return {}
 
     def set_llm_client(self, llm_client: NightwatchLLMClient) -> None:
         """Switch analysis providers and invalidate provider-specific cached output."""
         self.llm = llm_client
-        self._last_ai_signature = ""
-        self._last_ai_attempt = 0.0
-        self._last_ai_diagnosis = {}
+        self._ai_diagnosis_attempts.clear()
+        self._ai_diagnosis_cache.clear()
 
     # ─── Auto-Remediation ────────────────────────────────────────────────────
 
@@ -781,7 +899,7 @@ class NightwatchEngine:
         incidents = list(self._incidents)
         if active_only:
             incidents = [i for i in incidents if i.is_active]
-        return [i.to_dict() for i in reversed(incidents[:limit])]
+        return [i.to_dict() for i in reversed(incidents[-limit:])]
 
     def get_active_incidents(self) -> list[dict]:
         return self.get_incidents(active_only=True)
@@ -858,6 +976,9 @@ class NightwatchEngine:
             },
             "metrics_summary": {k: v for k, v in list(metrics.items())[:10]},
             "active_incident": incident.to_dict() if incident else None,
+            "active_incidents": [
+                item.to_dict() for item in self._active_incidents.values()
+            ],
         }
 
     @property

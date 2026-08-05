@@ -32,6 +32,207 @@ def _condition_status(conditions: list[Any] | None, condition_type: str) -> str:
     return "Unknown"
 
 
+def _owner_name(resource: Any, owner_kind: str) -> str | None:
+    for owner in getattr(resource.metadata, "owner_references", None) or []:
+        if getattr(owner, "kind", None) == owner_kind:
+            return str(owner.name)
+    return None
+
+
+def _resource_time(resource: Any) -> datetime:
+    created = getattr(resource.metadata, "creation_timestamp", None)
+    if isinstance(created, datetime):
+        if created.tzinfo is None:
+            return created.replace(tzinfo=timezone.utc)
+        return created
+    return datetime.min.replace(tzinfo=timezone.utc)
+
+
+def _failure_condition(resource: Any) -> Any | None:
+    for condition in getattr(resource.status, "conditions", None) or []:
+        if (
+            getattr(condition, "type", None) == "Failed"
+            and str(getattr(condition, "status", "Unknown")) == "True"
+        ):
+            return condition
+    return None
+
+
+def _complete_condition(resource: Any) -> Any | None:
+    for condition in getattr(resource.status, "conditions", None) or []:
+        if (
+            getattr(condition, "type", None) == "Complete"
+            and str(getattr(condition, "status", "Unknown")) == "True"
+        ):
+            return condition
+    return None
+
+
+def _current_pod_failure_reasons(pod: Any) -> list[str]:
+    """Return only actionable failure reasons for a non-terminal pod.
+
+    Kubernetes deliberately retains terminal pod objects for Job history,
+    evictions, and manual debugging. Those objects are evidence of past events,
+    not active workloads. CronJob outcomes are evaluated separately from their
+    latest owning Job.
+    """
+    if getattr(pod.metadata, "deletion_timestamp", None) is not None:
+        return []
+
+    phase = str(getattr(pod.status, "phase", None) or "Unknown")
+    if phase in {"Succeeded", "Failed"}:
+        return []
+
+    failure_reasons = {
+        "CrashLoopBackOff",
+        "CreateContainerConfigError",
+        "CreateContainerError",
+        "ErrImagePull",
+        "ImagePullBackOff",
+        "InvalidImageName",
+        "RunContainerError",
+    }
+    reasons: list[str] = []
+    statuses = list(getattr(pod.status, "init_container_statuses", None) or [])
+    statuses.extend(getattr(pod.status, "container_statuses", None) or [])
+    for container_status in statuses:
+        state = getattr(container_status, "state", None)
+        waiting = getattr(state, "waiting", None) if state else None
+        reason = getattr(waiting, "reason", None) if waiting else None
+        if reason in failure_reasons and reason not in reasons:
+            reasons.append(str(reason))
+
+    for condition in getattr(pod.status, "conditions", None) or []:
+        if (
+            getattr(condition, "type", None) == "PodScheduled"
+            and str(getattr(condition, "status", "Unknown")) == "False"
+            and getattr(condition, "reason", None) == "Unschedulable"
+            and "Unschedulable" not in reasons
+        ):
+            reasons.append("Unschedulable")
+
+    if phase == "Unknown" and "Unknown" not in reasons:
+        reasons.append("Unknown")
+    return reasons
+
+
+def _cronjob_records(
+    cluster_name: str,
+    cronjobs: list[Any],
+    jobs: list[Any],
+    observed_at: str,
+) -> list[dict[str, Any]]:
+    latest_jobs: dict[tuple[str, str], Any] = {}
+    for job in jobs:
+        cronjob_name = _owner_name(job, "CronJob")
+        if not cronjob_name:
+            continue
+        key = (str(job.metadata.namespace), cronjob_name)
+        current = latest_jobs.get(key)
+        if current is None or _resource_time(job) > _resource_time(current):
+            latest_jobs[key] = job
+
+    records: list[dict[str, Any]] = []
+    for cronjob in cronjobs:
+        namespace = str(cronjob.metadata.namespace)
+        name = str(cronjob.metadata.name)
+        latest_job = latest_jobs.get((namespace, name))
+        suspended = bool(getattr(cronjob.spec, "suspend", False))
+        last_scheduled = getattr(cronjob.status, "last_schedule_time", None)
+        last_successful = getattr(cronjob.status, "last_successful_time", None)
+        status = "healthy" if suspended else "unknown"
+        latest_job_name = None
+        latest_job_status = "suspended" if suspended else "not_observed"
+        reason = "Suspended" if suspended else "NoObservedRuns"
+        message = (
+            "CronJob is intentionally suspended"
+            if suspended
+            else "No Job owned by this CronJob was observed"
+        )
+        last_run_at = None
+
+        if latest_job is not None:
+            latest_job_name = str(latest_job.metadata.name)
+            created = _resource_time(latest_job)
+            last_run_at = None if created == datetime.min.replace(
+                tzinfo=timezone.utc
+            ) else created.isoformat()
+
+        if latest_job is not None and not suspended:
+            failed = _failure_condition(latest_job)
+            completed = _complete_condition(latest_job)
+            active = int(getattr(latest_job.status, "active", 0) or 0)
+            succeeded = int(getattr(latest_job.status, "succeeded", 0) or 0)
+            if failed is not None:
+                status = "unhealthy"
+                latest_job_status = "failed"
+                reason = str(getattr(failed, "reason", None) or "JobFailed")
+                message = str(
+                    getattr(failed, "message", None)
+                    or "Latest owned Job failed"
+                )
+            elif completed is not None or succeeded > 0:
+                status = "healthy"
+                latest_job_status = "complete"
+                reason = str(
+                    getattr(completed, "reason", None) or "CompletionsReached"
+                )
+                message = "Latest owned Job completed successfully"
+            elif active > 0:
+                status = "healthy"
+                latest_job_status = "running"
+                reason = "JobActive"
+                message = "Latest owned Job is running"
+            else:
+                status = "unknown"
+                latest_job_status = "unknown"
+                reason = "JobStatusUnknown"
+                message = "Latest owned Job has no terminal or active status"
+
+        if latest_job is None and not suspended:
+            if isinstance(last_successful, datetime) and (
+                not isinstance(last_scheduled, datetime)
+                or last_successful >= last_scheduled
+            ):
+                status = "healthy"
+                latest_job_status = "complete"
+                reason = "LastScheduledRunSucceeded"
+                message = "CronJob reports its last scheduled run succeeded"
+            elif not isinstance(last_scheduled, datetime):
+                status = "healthy"
+                latest_job_status = "not_observed"
+                reason = "AwaitingFirstRun"
+                message = "CronJob has not reached its first scheduled run"
+
+        records.append(
+            {
+                "cluster": cluster_name,
+                "namespace": namespace,
+                "name": name,
+                "schedule": str(getattr(cronjob.spec, "schedule", "")),
+                "suspended": suspended,
+                "latest_job": latest_job_name,
+                "latest_job_status": latest_job_status,
+                "reason": reason,
+                "message": message,
+                "last_run_at": last_run_at,
+                "last_scheduled_at": (
+                    last_scheduled.isoformat()
+                    if isinstance(last_scheduled, datetime)
+                    else None
+                ),
+                "last_successful_at": (
+                    last_successful.isoformat()
+                    if isinstance(last_successful, datetime)
+                    else None
+                ),
+                "status": status,
+                "observed_at": observed_at,
+            }
+        )
+    return records
+
+
 class KubernetesClustersAdapter(BaseNightwatchAdapter):
     """Collect cluster, node, deployment, and unhealthy-pod evidence.
 
@@ -48,6 +249,7 @@ class KubernetesClustersAdapter(BaseNightwatchAdapter):
             "clusters": [],
             "nodes": [],
             "deployments": [],
+            "cronjobs": [],
             "pods": [],
         }
         self._collection_errors: dict[str, str] = {}
@@ -167,9 +369,45 @@ class KubernetesClustersAdapter(BaseNightwatchAdapter):
             ).items,
         )
 
+    def _list_batch_workloads(
+        self,
+        batch_api: client.BatchV1Api,
+        namespaces: list[str],
+    ) -> tuple[list[Any], list[Any]]:
+        timeout = self.request_timeout
+        if namespaces:
+            jobs: list[Any] = []
+            cronjobs: list[Any] = []
+            for namespace in namespaces:
+                jobs.extend(
+                    batch_api.list_namespaced_job(
+                        namespace, _request_timeout=timeout
+                    ).items
+                )
+                cronjobs.extend(
+                    batch_api.list_namespaced_cron_job(
+                        namespace, _request_timeout=timeout
+                    ).items
+                )
+            return jobs, cronjobs
+        return (
+            batch_api.list_job_for_all_namespaces(
+                _request_timeout=timeout
+            ).items,
+            batch_api.list_cron_job_for_all_namespaces(
+                _request_timeout=timeout
+            ).items,
+        )
+
     def collect_metrics(self) -> dict:
         observed_at = datetime.now(timezone.utc).isoformat()
-        snapshot = {"clusters": [], "nodes": [], "deployments": [], "pods": []}
+        snapshot = {
+            "clusters": [],
+            "nodes": [],
+            "deployments": [],
+            "cronjobs": [],
+            "pods": [],
+        }
         self._collection_errors = {
             f"{cluster}:connection": error
             for cluster, error in self._connection_errors.items()
@@ -190,6 +428,7 @@ class KubernetesClustersAdapter(BaseNightwatchAdapter):
             api_client = connection["api_client"]
             core_api = client.CoreV1Api(api_client)
             apps_api = client.AppsV1Api(api_client)
+            batch_api = client.BatchV1Api(api_client)
             version_api = client.VersionApi(api_client)
             try:
                 version = version_api.get_code(_request_timeout=self.request_timeout)
@@ -209,6 +448,14 @@ class KubernetesClustersAdapter(BaseNightwatchAdapter):
                     }
                 )
                 continue
+
+            try:
+                jobs, cronjobs = self._list_batch_workloads(
+                    batch_api, connection["namespaces"]
+                )
+            except Exception as exc:
+                self._record_error(cluster_name, "batch", exc)
+                jobs, cronjobs = [], []
 
             node_records = []
             for node in nodes:
@@ -239,34 +486,22 @@ class KubernetesClustersAdapter(BaseNightwatchAdapter):
                     }
                 )
 
+            cronjob_records = _cronjob_records(
+                cluster_name, cronjobs, jobs, observed_at
+            )
+
             unhealthy_pods = []
             for pod in pods:
                 phase = str(pod.status.phase or "Unknown")
-                waiting_reasons = [
-                    state.waiting.reason
-                    for container_status in pod.status.container_statuses or []
-                    if (state := container_status.state) and state.waiting
-                ]
-                failure_reasons = {
-                    "CrashLoopBackOff",
-                    "CreateContainerConfigError",
-                    "CreateContainerError",
-                    "ErrImagePull",
-                    "ImagePullBackOff",
-                    "InvalidImageName",
-                    "RunContainerError",
-                }
-                unhealthy = phase in {"Failed", "Unknown"} or bool(
-                    failure_reasons.intersection(waiting_reasons)
-                )
-                if unhealthy:
+                failure_reasons = _current_pod_failure_reasons(pod)
+                if failure_reasons:
                     unhealthy_pods.append(
                         {
                             "cluster": cluster_name,
                             "namespace": pod.metadata.namespace,
                             "name": pod.metadata.name,
                             "phase": phase,
-                            "reasons": waiting_reasons,
+                            "reasons": failure_reasons,
                             "status": "unhealthy",
                             "observed_at": observed_at,
                         }
@@ -274,6 +509,7 @@ class KubernetesClustersAdapter(BaseNightwatchAdapter):
 
             snapshot["nodes"].extend(node_records)
             snapshot["deployments"].extend(deployment_records)
+            snapshot["cronjobs"].extend(cronjob_records)
             snapshot["pods"].extend(unhealthy_pods)
             snapshot["clusters"].append(
                 {
@@ -287,6 +523,11 @@ class KubernetesClustersAdapter(BaseNightwatchAdapter):
                     "deployments_total": len(deployment_records),
                     "deployments_degraded": sum(
                         item["status"] == "degraded" for item in deployment_records
+                    ),
+                    "cronjobs_total": len(cronjob_records),
+                    "cronjobs_unhealthy": sum(
+                        item["status"] == "unhealthy"
+                        for item in cronjob_records
                     ),
                     "observed_at": observed_at,
                     "stale": False,
@@ -354,6 +595,28 @@ class KubernetesClustersAdapter(BaseNightwatchAdapter):
                     **metadata,
                 )
             )
+        for cronjob in self._snapshot.get("cronjobs", []):
+            if cronjob["status"] == "unhealthy":
+                check = self._fail
+            elif cronjob["status"] == "healthy":
+                check = self._ok
+            else:
+                check = self._unknown
+            metadata = {**cronjob, "resource_name": cronjob["name"]}
+            metadata.pop("name", None)
+            checks.append(
+                check(
+                    "kubernetes_"
+                    f"{_check_id(cronjob['cluster'])}_"
+                    f"{_check_id(cronjob['namespace'])}_"
+                    f"{_check_id(cronjob['name'])}_latest_run",
+                    f"CronJob {cronjob['namespace']}/{cronjob['name']} latest Job "
+                    f"{cronjob['latest_job'] or 'not observed'} is "
+                    f"{cronjob['latest_job_status']}: {cronjob['message']}",
+                    component="Kubernetes CronJob",
+                    **metadata,
+                )
+            )
         for pod in self._snapshot["pods"]:
             metadata = {**pod, "resource_name": pod["name"]}
             metadata.pop("name", None)
@@ -386,6 +649,7 @@ class KubernetesClustersAdapter(BaseNightwatchAdapter):
         for resource_type, category in (
             ("nodes", "Kubernetes Node"),
             ("deployments", "Kubernetes Deployment"),
+            ("cronjobs", "Kubernetes CronJob"),
             ("pods", "Kubernetes Pod"),
         ):
             singular = resource_type[:-1]
@@ -406,5 +670,5 @@ class KubernetesClustersAdapter(BaseNightwatchAdapter):
         return (
             "Read-only Kubernetes API monitoring for configured clusters: "
             f"{names}. Evidence includes node readiness, deployment availability, "
-            "and unhealthy pod state."
+            "latest CronJob outcomes, and current non-terminal pod failures."
         )
