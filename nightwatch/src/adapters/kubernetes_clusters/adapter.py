@@ -16,6 +16,7 @@ except ImportError:  # pragma: no cover - exercised in minimal installations
     kubernetes_config = None
 
 from src.adapters.base_adapter import BaseNightwatchAdapter, Component, HealthCheck
+from src.k8s.client_config import configure_incluster_bearer
 
 
 log = structlog.get_logger("nightwatch.adapter.kubernetes_clusters")
@@ -300,7 +301,9 @@ class KubernetesClustersAdapter(BaseNightwatchAdapter):
             try:
                 if cluster_config.get("in_cluster", False):
                     kubernetes_config.load_incluster_config()
-                    api_client = client.ApiClient()
+                    configuration = client.Configuration.get_default_copy()
+                    configure_incluster_bearer(configuration)
+                    api_client = client.ApiClient(configuration)
                 else:
                     kubeconfig_path = cluster_config.get("kubeconfig_path") or self.config.get(
                         "kubeconfig_path"

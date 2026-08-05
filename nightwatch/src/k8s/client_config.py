@@ -30,7 +30,11 @@ from __future__ import annotations
 
 from typing import Optional
 
-__all__ = ["load_k8s_config", "normalize_incluster_bearer"]
+__all__ = [
+    "configure_incluster_bearer",
+    "load_k8s_config",
+    "normalize_incluster_bearer",
+]
 
 
 def normalize_incluster_bearer(configuration) -> None:
@@ -44,14 +48,36 @@ def normalize_incluster_bearer(configuration) -> None:
     api_key = getattr(configuration, "api_key", None)
     if not api_key:
         return
-    # Prefer an already-set BearerToken, else the loader's 'authorization' slot.
-    raw = api_key.get("BearerToken") or api_key.get("authorization")
+    # The loader refresh hook updates `authorization`; prefer that fresh value
+    # over a previously normalized BearerToken during ServiceAccount rotation.
+    raw = api_key.get("authorization") or api_key.get("BearerToken")
     if not raw:
         return
     # Strip any existing scheme prefix ('bearer ' / 'Bearer ').
     token = raw.split(" ", 1)[1] if raw[:7].lower() == "bearer " else raw
     configuration.api_key["BearerToken"] = token
     configuration.api_key_prefix["BearerToken"] = "Bearer"
+
+
+def configure_incluster_bearer(configuration) -> None:
+    """Normalize the current token and keep rotated tokens normalized."""
+
+    normalize_incluster_bearer(configuration)
+    original_hook = getattr(configuration, "refresh_api_key_hook", None)
+
+    if getattr(original_hook, "_nightwatch_normalizes_bearer", False):
+        return
+
+    def _refresh_and_normalize(refreshed_configuration) -> None:
+        if original_hook is not None:
+            original_hook(refreshed_configuration)
+        normalize_incluster_bearer(refreshed_configuration)
+        # The Kubernetes in-cluster loader reinstalls its own refresh hook each
+        # time it reloads the projected token. Keep our wrapper authoritative.
+        refreshed_configuration.refresh_api_key_hook = _refresh_and_normalize
+
+    _refresh_and_normalize._nightwatch_normalizes_bearer = True
+    configuration.refresh_api_key_hook = _refresh_and_normalize
 
 
 def load_k8s_config(kubeconfig_path: Optional[str] = None) -> bool:
@@ -84,15 +110,6 @@ def load_k8s_config(kubeconfig_path: Optional[str] = None) -> bool:
     # In-cluster: bridge the api_key key mismatch so requests are authenticated
     # instead of going out as system:anonymous.
     cfg = client.Configuration.get_default_copy()
-    normalize_incluster_bearer(cfg)
-
-    original_hook = getattr(cfg, "refresh_api_key_hook", None)
-
-    def _refresh_and_normalize(configuration) -> None:
-        if original_hook is not None:
-            original_hook(configuration)
-        normalize_incluster_bearer(configuration)
-
-    cfg.refresh_api_key_hook = _refresh_and_normalize
+    configure_incluster_bearer(cfg)
     client.Configuration.set_default(cfg)
     return True
