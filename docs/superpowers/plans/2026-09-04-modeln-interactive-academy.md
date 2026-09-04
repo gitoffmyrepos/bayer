@@ -51,7 +51,7 @@
 - Create: `modeln-academy/content/dist/search-v1.json`
 - Create: `modeln-academy/tests/content/test_course_bundle.py`
 
-- [ ] Write failing coverage tests for all 37 numbered chapters, eight weekend outcomes, 35 configured FGI/source pairs, six workflow families, fourteen Glue jobs, fourteen DynamoDB tables, seven worlds, required evidence labels, resolvable citations, answer explanations, secret-pattern rejection, and scenario reachability.
+- [ ] Write failing coverage tests for all 40 numbered chapters, eight weekend outcomes, 35 configured FGI/source pairs, six workflow families, fourteen Glue jobs, fourteen DynamoDB tables, seven worlds, required evidence labels, resolvable citations, answer explanations, secret-pattern rejection, and scenario reachability.
 - [ ] Run `python3 -m pytest modeln-academy/tests/content/test_course_bundle.py -q`; expect missing-builder failures.
 - [ ] Implement a deterministic Markdown section parser that assigns stable slugs, strips absolute paths and account-like identifiers, preserves evidence labels, and emits cited reference sections.
 - [ ] Curate seven worlds, at least 24 missions, at least 120 mixed-form questions, the FGI/runtime/data atlas, and two capstone scenarios from the canonical guide and inventories.

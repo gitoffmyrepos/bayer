@@ -23,7 +23,7 @@ The academy must run in the `sb-ha-cluster` homelab, synchronize progress across
 
 ## Learner Journey
 
-The 37 chapters become seven connected worlds:
+The 40 numbered chapters become seven connected worlds:
 
 1. **See the System** — Model N, middleware, identities, files versus rows, runs, and the three primary lanes.
 2. **Follow Inbound** — master data, SAP transactions, McKesson shared stages, Axway EDI 844, and dependencies.
@@ -205,7 +205,7 @@ The deployment supports rolling updates for stateless services. Database migrati
 
 ### Content acceptance
 
-- All 37 chapters and eight weekend outcomes are covered
+- All 40 numbered chapters and eight weekend outcomes are covered
 - All primary FGI/source identities appear in the atlas and at least one learning interaction
 - All seven worlds contain at least one visual trace, one decision, and one recall checkpoint
 - The capstone exercises evidence classification and safe-rerun reasoning
