@@ -1,10 +1,12 @@
 import { expect, test } from "@playwright/test";
 
+const learnerPassword = process.env.ACADEMY_PASSWORD ?? "Learn-ModelN-2026";
+
 test("learner can enter, explore a mission, and use the evidence atlas", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.goto("/");
   await page.getByLabel("Username").fill("kelvin");
-  await page.getByLabel("Password").fill("Learn-ModelN-2026");
+  await page.getByLabel("Password").fill(learnerPassword);
   await page.getByRole("button", { name: "Start learning" }).click();
 
   await expect(page.getByRole("heading", { name: "Systems Adventure" })).toBeVisible();
@@ -30,7 +32,7 @@ test("campaign remains usable at a phone viewport", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/");
   await page.getByLabel("Username").fill("kelvin");
-  await page.getByLabel("Password").fill("Learn-ModelN-2026");
+  await page.getByLabel("Password").fill(learnerPassword);
   await page.getByRole("button", { name: "Start learning" }).click();
 
   await expect(page.getByRole("heading", { name: "Systems Adventure" })).toBeVisible();
