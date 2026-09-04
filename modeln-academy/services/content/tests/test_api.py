@@ -53,6 +53,33 @@ def test_question_endpoint_returns_prompt_without_answer() -> None:
     assert "answer" not in response.json()
 
 
+def test_public_simulation_catalog_does_not_expose_branch_answers() -> None:
+    response = client().get("/v1/simulations")
+
+    assert response.status_code == 200
+    assert response.json() == [
+        {"id": "sim-missing-inbound", "title": "The Missing Inbound File"},
+        {"id": "sim-package-0009343", "title": "FGI 301 Package 0009343"},
+    ]
+    assert "next_state" not in response.text
+
+
+def test_reference_endpoint_returns_cited_learning_content() -> None:
+    response = client().get("/v1/references/chapter-1-model-n-and-middleware-from-zero")
+
+    assert response.status_code == 200
+    assert response.json()["evidence_class"] in {
+        "verified_in_code",
+        "configured",
+        "documented",
+        "environment_specific",
+        "legacy_test_template",
+        "unconfirmed_gap",
+        "hypothesis",
+    }
+    assert len(response.json()["content"]) >= 200
+
+
 def test_internal_question_endpoint_returns_scoring_contract() -> None:
     response = client().get(
         "/internal/questions/chapter-1-world",

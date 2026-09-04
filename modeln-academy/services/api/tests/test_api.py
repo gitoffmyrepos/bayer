@@ -1,3 +1,4 @@
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import pytest
@@ -46,6 +47,17 @@ def test_login_sets_opaque_http_only_session_cookie(application) -> None:
     assert "Learn-ModelN-2026" not in cookie
 
 
+def test_login_sets_refresh_safe_csrf_cookie(application) -> None:
+    with TestClient(application) as client:
+        response = client.post(
+            "/api/auth/login",
+            json={"username": "kelvin", "password": "Learn-ModelN-2026"},
+        )
+
+    cookies = response.headers.get_list("set-cookie")
+    assert any("academy_csrf=" in cookie and "HttpOnly" not in cookie for cookie in cookies)
+
+
 def test_invalid_login_returns_safe_error(application) -> None:
     with TestClient(application) as client:
         response = client.post("/api/auth/login", json={"username": "kelvin", "password": "wrong"})
@@ -87,6 +99,25 @@ def test_mission_resume_is_shared_across_clients(application) -> None:
     assert advanced.status_code == 200
     assert resumed.json()["attempt_id"] == started.json()["attempt_id"]
     assert resumed.json()["current_beat"] == 3
+
+
+def test_concurrent_mission_starts_are_idempotent(application) -> None:
+    with TestClient(application) as first, TestClient(application) as second:
+        first_csrf = sign_in(first)
+        second_csrf = sign_in(second)
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            responses = list(
+                pool.map(
+                    lambda client_and_token: client_and_token[0].post(
+                        "/api/missions/mission-02/start",
+                        headers={"X-CSRF-Token": client_and_token[1]},
+                    ),
+                    [(first, first_csrf), (second, second_csrf)],
+                )
+            )
+
+    assert [response.status_code for response in responses] == [200, 200]
+    assert responses[0].json()["attempt_id"] == responses[1].json()["attempt_id"]
 
 
 def test_answer_submission_is_scored_persisted_and_idempotent(application) -> None:
@@ -143,6 +174,19 @@ def test_answer_schedules_question_for_daily_review(application) -> None:
     assert queue.json()[0]["due_at"]
 
 
+def test_daily_review_answer_does_not_require_an_open_mission(application) -> None:
+    with TestClient(application) as client:
+        csrf = sign_in(client)
+        response = client.post(
+            "/api/reviews/chapter-1-world/answer",
+            headers={"X-CSRF-Token": csrf},
+            json={"submission_id": "daily-one", "answer": "see-the-system", "hints_used": 0},
+        )
+
+    assert response.status_code == 200
+    assert response.json()["correct"] is True
+
+
 def test_simulation_run_persists_branch_and_score(application) -> None:
     with TestClient(application) as client:
         csrf = sign_in(client)
@@ -168,6 +212,40 @@ def test_authenticated_atlas_search_returns_source_backed_results(application) -
 
     assert response.status_code == 200
     assert any("205" in result["text"] for result in response.json())
+
+
+def test_simulation_catalog_and_reference_are_available_to_signed_in_learner(application) -> None:
+    with TestClient(application) as client:
+        sign_in(client)
+        simulations = client.get("/api/simulations")
+        reference = client.get("/api/references/chapter-1-model-n-and-middleware-from-zero")
+
+    assert simulations.status_code == 200
+    assert len(simulations.json()) == 2
+    assert reference.status_code == 200
+    assert len(reference.json()["content"]) >= 200
+
+
+def test_grounded_coach_returns_only_cited_atlas_evidence(application) -> None:
+    with TestClient(application) as client:
+        sign_in(client)
+        response = client.get("/api/coach", params={"q": "What is SAP_P4S_DIRECTSALES?"})
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["grounded"] is True
+    assert payload["citations"]
+    assert "SAP_P4S_DIRECTSALES" in payload["answer"]
+
+
+def test_grounded_coach_fails_closed_when_no_evidence_matches(application) -> None:
+    with TestClient(application) as client:
+        sign_in(client)
+        response = client.get("/api/coach", params={"q": "zxqv nonexistent topic"})
+
+    assert response.status_code == 200
+    assert response.json()["grounded"] is False
+    assert response.json()["citations"] == []
 
 
 def test_logout_revokes_session(application) -> None:

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from copy import deepcopy
 from pathlib import Path
 from typing import Any
@@ -63,18 +64,49 @@ class CourseStore:
     def simulations(self) -> list[dict[str, Any]]:
         return deepcopy(self._course["simulations"])
 
+    def public_simulations(self) -> list[dict[str, str]]:
+        return [
+            {"id": str(simulation["id"]), "title": str(simulation["title"])}
+            for simulation in self._course["simulations"]
+        ]
+
     def references(self) -> dict[str, dict[str, Any]]:
         return deepcopy(self._course["references"])
 
+    def reference(self, reference_id: str) -> dict[str, Any] | None:
+        reference = self._course["references"].get(reference_id)
+        return deepcopy(reference) if reference else None
+
     def search(self, query: str, limit: int) -> list[dict[str, Any]]:
-        terms = [term for term in query.casefold().split() if term]
+        stop_words = {
+            "a",
+            "an",
+            "and",
+            "are",
+            "for",
+            "how",
+            "in",
+            "is",
+            "of",
+            "the",
+            "to",
+            "what",
+            "where",
+            "which",
+        }
+        terms = [
+            term
+            for term in re.findall(r"[a-z0-9][a-z0-9_-]*", query.casefold())
+            if term not in stop_words
+        ]
         if not terms:
             return []
         ranked: list[tuple[int, dict[str, Any]]] = []
         for document in self._search["documents"]:
             haystack = f"{document['title']} {document['text']}".casefold()
-            score = sum(haystack.count(term) for term in terms)
-            if score:
+            counts = [haystack.count(term) for term in terms]
+            score = sum(counts)
+            if all(counts):
                 public = deepcopy(document)
                 public["score"] = score
                 ranked.append((score, public))

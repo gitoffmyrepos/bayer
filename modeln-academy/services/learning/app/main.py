@@ -15,6 +15,7 @@ from .scoring import AnswerInput, evaluate_answer, update_mastery
 
 class PrivateQuestion(BaseModel):
     id: str
+    type: str
     answer: Any
     explanation: str
     difficulty: int = Field(ge=1, le=5)
@@ -62,6 +63,7 @@ def create_app(internal_token: str) -> FastAPI:
             AnswerInput(
                 expected=request.question.answer,
                 submitted=request.submitted,
+                kind=request.question.type,
                 hints_used=request.hints_used,
             )
         )

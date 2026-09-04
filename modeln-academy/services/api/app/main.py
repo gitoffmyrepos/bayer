@@ -11,6 +11,7 @@ from fastapi import Cookie, Depends, FastAPI, Header, HTTPException, Query, Resp
 from modeln_academy_shared.models import ApiError, ServiceHealth
 from pydantic import BaseModel, Field
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 
 from .auth import new_token, token_hash, verify_password
 from .db import Database, create_database, seed_user
@@ -18,6 +19,7 @@ from .models import AnswerAttempt, Mastery, MissionAttempt, Review, Session, Sim
 from .services import AcademyServices, HttpServices
 
 SESSION_COOKIE = "academy_session"
+CSRF_COOKIE = "academy_csrf"
 
 
 class LoginRequest(BaseModel):
@@ -76,6 +78,83 @@ def create_app(
             raise api_error(403, "csrf_failed", "Refresh the page and try again.")
         return identity
 
+    def score_submission(
+        db: Any,
+        user_id: str,
+        question_id: str,
+        request: AnswerRequest,
+        mission_attempt_id: str | None,
+    ) -> dict[str, Any]:
+        prior = db.scalar(
+            select(AnswerAttempt).where(
+                AnswerAttempt.submission_id == request.submission_id,
+                AnswerAttempt.user_id == user_id,
+            )
+        )
+        if prior:
+            return dict(prior.result)
+        public_question = services.public_question(question_id)
+        if not public_question:
+            raise api_error(404, "question_not_found", "That question does not exist.")
+        skill = str(public_question["mastery_skill"])
+        mastery = db.scalar(select(Mastery).where(Mastery.user_id == user_id, Mastery.skill == skill))
+        current_mastery = mastery.score if mastery else 0.0
+        try:
+            result = services.score(
+                {
+                    "request_id": request.submission_id,
+                    "question_id": question_id,
+                    "submitted": request.answer,
+                    "hints_used": request.hints_used,
+                    "current_mastery": current_mastery,
+                }
+            )
+        except KeyError as exc:
+            raise api_error(404, "question_not_found", "That question does not exist.") from exc
+        now = datetime.now(UTC)
+        if mastery:
+            mastery.score = result["new_mastery"]
+            mastery.updated_at = now
+        else:
+            db.add(Mastery(user_id=user_id, skill=skill, score=result["new_mastery"], updated_at=now))
+        db.add(
+            AnswerAttempt(
+                submission_id=request.submission_id,
+                user_id=user_id,
+                mission_attempt_id=mission_attempt_id,
+                question_id=question_id,
+                result=result,
+                created_at=now,
+            )
+        )
+        review = db.scalar(select(Review).where(Review.user_id == user_id, Review.question_id == question_id))
+        scheduled = services.schedule(
+            {
+                "repetitions": review.repetitions if review else 0,
+                "interval_days": review.interval_days if review else 0,
+                "ease": review.ease if review else 2.5,
+                "quality": 5 if result["correct"] and request.hints_used == 0 else 2,
+            }
+        )
+        due_at = datetime.fromisoformat(scheduled["due_at"])
+        if review:
+            review.repetitions = scheduled["repetitions"]
+            review.interval_days = scheduled["interval_days"]
+            review.ease = scheduled["ease"]
+            review.due_at = due_at
+        else:
+            db.add(
+                Review(
+                    user_id=user_id,
+                    question_id=question_id,
+                    repetitions=scheduled["repetitions"],
+                    interval_days=scheduled["interval_days"],
+                    ease=scheduled["ease"],
+                    due_at=due_at,
+                )
+            )
+        return result
+
     @app.get("/api/health/live")
     def live() -> ServiceHealth:
         return ServiceHealth(service="api", status="ok", version="1.0.0")
@@ -128,6 +207,15 @@ def create_app(
                 samesite="strict",
                 path="/",
             )
+            response.set_cookie(
+                CSRF_COOKIE,
+                csrf_token,
+                max_age=43200,
+                secure=secure_cookies,
+                httponly=False,
+                samesite="strict",
+                path="/",
+            )
             return {"display_name": user.display_name, "csrf_token": csrf_token}
 
     @app.post("/api/auth/logout", status_code=204)
@@ -140,6 +228,7 @@ def create_app(
             if record:
                 db.delete(record)
         response.delete_cookie(SESSION_COOKIE, path="/")
+        response.delete_cookie(CSRF_COOKIE, path="/")
         response.status_code = 204
         return response
 
@@ -194,30 +283,48 @@ def create_app(
     ) -> dict[str, Any]:
         if not services.mission(mission_id):
             raise api_error(404, "mission_not_found", "That mission does not exist.")
-        with database.sessions.begin() as db:
-            attempt = db.scalar(
-                select(MissionAttempt).where(
-                    MissionAttempt.user_id == identity[0].id,
-                    MissionAttempt.mission_id == mission_id,
-                    MissionAttempt.course_version == services.course_version,
+        try:
+            with database.sessions.begin() as db:
+                attempt = db.scalar(
+                    select(MissionAttempt).where(
+                        MissionAttempt.user_id == identity[0].id,
+                        MissionAttempt.mission_id == mission_id,
+                        MissionAttempt.course_version == services.course_version,
+                    )
                 )
-            )
-            if not attempt:
-                attempt = MissionAttempt(
-                    user_id=identity[0].id,
-                    mission_id=mission_id,
-                    course_version=services.course_version,
-                    current_beat=0,
-                    started_at=datetime.now(UTC),
+                if not attempt:
+                    attempt = MissionAttempt(
+                        user_id=identity[0].id,
+                        mission_id=mission_id,
+                        course_version=services.course_version,
+                        current_beat=0,
+                        started_at=datetime.now(UTC),
+                    )
+                    db.add(attempt)
+                    db.flush()
+                return {
+                    "attempt_id": attempt.id,
+                    "mission_id": attempt.mission_id,
+                    "course_version": attempt.course_version,
+                    "current_beat": attempt.current_beat,
+                }
+        except IntegrityError as exc:
+            with database.sessions() as db:
+                attempt = db.scalar(
+                    select(MissionAttempt).where(
+                        MissionAttempt.user_id == identity[0].id,
+                        MissionAttempt.mission_id == mission_id,
+                        MissionAttempt.course_version == services.course_version,
+                    )
                 )
-                db.add(attempt)
-                db.flush()
-            return {
-                "attempt_id": attempt.id,
-                "mission_id": attempt.mission_id,
-                "course_version": attempt.course_version,
-                "current_beat": attempt.current_beat,
-            }
+                if not attempt:
+                    raise api_error(409, "mission_start_conflict", "Retry opening this mission.") from exc
+                return {
+                    "attempt_id": attempt.id,
+                    "mission_id": attempt.mission_id,
+                    "course_version": attempt.course_version,
+                    "current_beat": attempt.current_beat,
+                }
 
     @app.patch("/api/attempts/{attempt_id}/beat")
     def update_beat(
@@ -242,95 +349,10 @@ def create_app(
         identity: Annotated[tuple[User, Session], Depends(csrf_session)],
     ) -> dict[str, Any]:
         with database.sessions.begin() as db:
-            prior = db.scalar(
-                select(AnswerAttempt).where(
-                    AnswerAttempt.submission_id == request.submission_id,
-                    AnswerAttempt.user_id == identity[0].id,
-                )
-            )
-            if prior:
-                return dict(prior.result)
             attempt = db.get(MissionAttempt, attempt_id)
             if not attempt or attempt.user_id != identity[0].id:
                 raise api_error(404, "attempt_not_found", "That mission attempt does not exist.")
-            public_question = services.public_question(question_id)
-            if not public_question:
-                raise api_error(404, "question_not_found", "That question does not exist.")
-            skill = str(public_question["mastery_skill"])
-            mastery = db.scalar(
-                select(Mastery).where(
-                    Mastery.user_id == identity[0].id,
-                    Mastery.skill == skill,
-                )
-            )
-            current_mastery = mastery.score if mastery else 0.0
-            try:
-                result = services.score(
-                    {
-                        "request_id": request.submission_id,
-                        "question_id": question_id,
-                        "submitted": request.answer,
-                        "hints_used": request.hints_used,
-                        "current_mastery": current_mastery,
-                    }
-                )
-            except KeyError as exc:
-                raise api_error(404, "question_not_found", "That question does not exist.") from exc
-            now = datetime.now(UTC)
-            if mastery:
-                mastery.score = result["new_mastery"]
-                mastery.updated_at = now
-            else:
-                db.add(
-                    Mastery(
-                        user_id=identity[0].id,
-                        skill=skill,
-                        score=result["new_mastery"],
-                        updated_at=now,
-                    )
-                )
-            db.add(
-                AnswerAttempt(
-                    submission_id=request.submission_id,
-                    user_id=identity[0].id,
-                    mission_attempt_id=attempt.id,
-                    question_id=question_id,
-                    result=result,
-                    created_at=now,
-                )
-            )
-            review = db.scalar(
-                select(Review).where(
-                    Review.user_id == identity[0].id,
-                    Review.question_id == question_id,
-                )
-            )
-            scheduled = services.schedule(
-                {
-                    "repetitions": review.repetitions if review else 0,
-                    "interval_days": review.interval_days if review else 0,
-                    "ease": review.ease if review else 2.5,
-                    "quality": 5 if result["correct"] and request.hints_used == 0 else 2,
-                }
-            )
-            due_at = datetime.fromisoformat(scheduled["due_at"])
-            if review:
-                review.repetitions = scheduled["repetitions"]
-                review.interval_days = scheduled["interval_days"]
-                review.ease = scheduled["ease"]
-                review.due_at = due_at
-            else:
-                db.add(
-                    Review(
-                        user_id=identity[0].id,
-                        question_id=question_id,
-                        repetitions=scheduled["repetitions"],
-                        interval_days=scheduled["interval_days"],
-                        ease=scheduled["ease"],
-                        due_at=due_at,
-                    )
-                )
-            return result
+            return score_submission(db, identity[0].id, question_id, request, attempt.id)
 
     @app.get("/api/reviews/queue")
     def review_queue(
@@ -346,6 +368,15 @@ def create_app(
             }
             for review in reviews
         ]
+
+    @app.post("/api/reviews/{question_id}/answer")
+    def answer_review(
+        question_id: str,
+        request: AnswerRequest,
+        identity: Annotated[tuple[User, Session], Depends(csrf_session)],
+    ) -> dict[str, Any]:
+        with database.sessions.begin() as db:
+            return score_submission(db, identity[0].id, question_id, request, None)
 
     @app.post("/api/simulations/{scenario_id}/start")
     def start_simulation(
@@ -401,6 +432,43 @@ def create_app(
         limit: int = Query(default=10, ge=1, le=25),
     ) -> list[dict[str, Any]]:
         return services.search(q, limit)
+
+    @app.get("/api/simulations")
+    def simulations(
+        _identity: Annotated[tuple[User, Session], Depends(current_session)],
+    ) -> list[dict[str, str]]:
+        return services.simulations()
+
+    @app.get("/api/references/{reference_id}")
+    def reference(
+        reference_id: str,
+        _identity: Annotated[tuple[User, Session], Depends(current_session)],
+    ) -> dict[str, Any]:
+        result = services.reference(reference_id)
+        if not result:
+            raise api_error(404, "reference_not_found", "That evidence reference does not exist.")
+        return result
+
+    @app.get("/api/coach")
+    def coach(
+        _identity: Annotated[tuple[User, Session], Depends(current_session)],
+        q: str = Query(min_length=2, max_length=120),
+    ) -> dict[str, Any]:
+        """Return a deterministic, fail-closed evidence digest without unsupported claims."""
+        matches = services.search(q, 3)
+        if not matches:
+            return {
+                "grounded": False,
+                "answer": "I could not find supporting evidence in this course bundle. Try a specific FGI, job, table, or workflow name.",
+                "citations": [],
+            }
+        citations = list(dict.fromkeys(str(item["reference_id"]) for item in matches))
+        excerpts = [str(item["text"]).strip()[:700] for item in matches]
+        return {
+            "grounded": True,
+            "answer": "\n\n".join(excerpts),
+            "citations": citations,
+        }
 
     return app
 

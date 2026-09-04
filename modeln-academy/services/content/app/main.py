@@ -56,6 +56,17 @@ def create_app(store: CourseStore, internal_token: str) -> FastAPI:
     def search(q: str = Query(min_length=2, max_length=120), limit: int = Query(10, ge=1, le=25)) -> list[dict]:
         return store.search(q, limit)
 
+    @app.get("/v1/simulations")
+    def public_simulations() -> list[dict[str, str]]:
+        return store.public_simulations()
+
+    @app.get("/v1/references/{reference_id}")
+    def reference(reference_id: str) -> dict:
+        result = store.reference(reference_id)
+        if not result:
+            raise safe_not_found("reference_not_found", "That evidence reference does not exist.")
+        return result
+
     @app.get("/internal/questions/{question_id}", dependencies=[Depends(require_internal_token)])
     def internal_question(question_id: str) -> dict:
         result = store.internal_question(question_id)

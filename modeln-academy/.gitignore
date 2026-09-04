@@ -9,4 +9,5 @@ node_modules/
 /web/dist/
 playwright-report/
 test-results/
+web/artifacts/
 .env

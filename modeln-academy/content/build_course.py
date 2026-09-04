@@ -107,7 +107,7 @@ def sanitize(value: Any) -> Any:
 
 
 def parse_sections(markdown: str) -> list[Section]:
-    """Split Markdown into headed sections while preserving readable text."""
+    """Split Markdown into hierarchical sections while preserving child content."""
     matches = list(re.finditer(r"^(#{1,6})\s+(.+?)\s*$", markdown, re.MULTILINE))
     sections: list[Section] = []
     used: dict[str, int] = {}
@@ -116,11 +116,27 @@ def parse_sections(markdown: str) -> list[Section]:
         base_id = slugify(title)
         used[base_id] = used.get(base_id, 0) + 1
         identifier = base_id if used[base_id] == 1 else f"{base_id}-{used[base_id]}"
-        end = matches[index + 1].start() if index + 1 < len(matches) else len(markdown)
+        level = len(match.group(1))
+        end = len(markdown)
+        for following in matches[index + 1 :]:
+            if len(following.group(1)) <= level:
+                end = following.start()
+                break
         body = sanitize_text(markdown[match.end() : end])
         body = re.sub(r"\n{3,}", "\n\n", body)
-        sections.append(Section(identifier, title, len(match.group(1)), body[:6000]))
+        sections.append(Section(identifier, title, level, body[:6000]))
     return sections
+
+
+def learning_summary(content: str) -> str:
+    """Select the first useful prose block from a hierarchical chapter section."""
+    for block in re.split(r"\n\s*\n", content):
+        cleaned = re.sub(r"^#{1,6}\s+.*$", "", block, flags=re.MULTILINE).strip()
+        cleaned = cleaned.replace("**", "").replace("`", "")
+        cleaned = re.sub(r"\s+", " ", cleaned)
+        if len(cleaned) >= 80 and not cleaned.startswith("|"):
+            return cleaned[:420]
+    return re.sub(r"\s+", " ", content).strip()[:420]
 
 
 def chapter_number(title: str) -> int | None:
@@ -263,7 +279,15 @@ def make_question(
     }
     if options:
         question["options"] = sanitize(options)
+    if kind == "ordering" and isinstance(answer, list):
+        question["items"] = sanitize(list(reversed(answer)))
     return question
+
+
+def answer_options(answer: str, candidates: Iterable[str], limit: int = 4) -> list[str]:
+    """Build deterministic answer choices without leaking any additional evidence."""
+    alternatives = sorted({str(item) for item in candidates if item and str(item) != answer})
+    return [answer, *alternatives[: max(1, limit - 1)]]
 
 
 def build_questions(
@@ -310,6 +334,7 @@ def build_questions(
                     f"The configured lineage classifies {label} as {record['direction']}.",
                     "resolve_fgi_source_identity",
                     citation,
+                    answer_options(record["direction"], (item["direction"] for item in fgi)),
                 ),
                 make_question(
                     f"fgi-{index}-object",
@@ -319,6 +344,7 @@ def build_questions(
                     f"This identity carries {record['business_object']} from {record['source_system']} toward {record['target_system']}.",
                     "trace_inbound_or_outbound",
                     citation,
+                    answer_options(record["business_object"], (item["business_object"] for item in fgi)),
                 ),
             ]
         )
@@ -334,6 +360,10 @@ def build_questions(
                 f"The inventory classifies this job as {record['category']} using {record['job_type']}.",
                 "read_runtime_orchestration",
                 glue_citation,
+                answer_options(
+                    f"{record['category']} / {record['job_type']}",
+                    (f"{item['category']} / {item['job_type']}" for item in glue),
+                ),
             )
         )
 
@@ -348,6 +378,13 @@ def build_questions(
                 f"Use the table's explicit contract and evidence limitations: {record['purpose'] or 'purpose not evidenced'}.",
                 "read_runtime_orchestration",
                 dynamo_citation,
+                answer_options(
+                    record["purpose"] or "Purpose is not evidenced in the reviewed source.",
+                    (
+                        item["purpose"] or "Purpose is not evidenced in the reviewed source."
+                        for item in dynamodb
+                    ),
+                ),
             )
         )
 
@@ -362,6 +399,7 @@ def build_questions(
                 f"The workflow register classifies it as {record['classification']} and records {record['state_count']} states in the representative variant.",
                 "read_runtime_orchestration",
                 workflow_citation,
+                answer_options(record["classification"], (item["classification"] for item in workflows)),
             )
         )
 
@@ -408,6 +446,10 @@ def build_questions(
                 "Technical success at one boundary is not proof of the downstream business outcome.",
                 "classify_evidence",
                 first_reference_containing(sections, "Observability and Failure Evidence"),
+                [
+                    "No. Confirm the generated object, transfer, and target receipt or acknowledgment.",
+                    "Yes. A green workflow proves every downstream business boundary completed.",
+                ],
             ),
             make_question(
                 "evidence-terraform",
@@ -417,6 +459,10 @@ def build_questions(
                 "Keep configuration evidence separate from live environment proof.",
                 "classify_evidence",
                 outcome_citation,
+                [
+                    "It proves source configuration, not current deployment, enablement, execution, or success.",
+                    "It proves the resource is deployed, enabled, and recently successful.",
+                ],
             ),
             make_question(
                 "unsafe-rerun-all",
@@ -426,6 +472,10 @@ def build_questions(
                 "A broad rerun can duplicate delivery or corrupt partial-set state.",
                 "choose_safe_rerun_boundaries",
                 first_reference_containing(sections, "Retry, Catch, Skip"),
+                [
+                    "The failed boundary and idempotency effects are unproven; build the evidence packet first.",
+                    "The safe response is always to rerun the complete upstream chain immediately.",
+                ],
             ),
             make_question(
                 "unsafe-current-load",
@@ -435,6 +485,10 @@ def build_questions(
                 "Do not turn a configured or stored data boundary into an unsupported runtime claim.",
                 "follow_data_lineage",
                 first_reference_containing(sections, "Current-Load Selection"),
+                [
+                    "Current load is a data predicate whose exact meaning must be evidenced.",
+                    "Current load always means the latest successful live workflow execution.",
+                ],
             ),
         ]
     )
@@ -442,20 +496,43 @@ def build_questions(
 
 
 def build_worlds(chapters: list[Section], questions: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    questions_by_chapter = {question["citation_id"]: question["id"] for question in questions}
     chapter_lookup = {chapter_number(chapter.title): chapter for chapter in chapters}
+    question_ids_by_mission = {
+        f"mission-{number:02d}": [f"chapter-{number}-world"] for number in range(1, 41)
+    }
+    skill_world = {
+        "explain_platform_architecture": "see-the-system",
+        "resolve_fgi_source_identity": "follow-inbound",
+        "trace_inbound_or_outbound": "follow-inbound",
+        "trace_inbound_flow": "follow-inbound",
+        "read_runtime_orchestration": "run-the-engine",
+        "follow_data_lineage": "shape-the-data",
+        "trace_outbound_acknowledgment_flow": "close-the-loop",
+        "classify_evidence": "operate-safely",
+        "choose_safe_rerun_boundaries": "operate-safely",
+    }
+    ranges_by_world = {world_id: list(numbers) for world_id, _title, numbers, _description in WORLD_RANGES}
+    offsets = {world_id: 0 for world_id in ranges_by_world}
+    for question in questions:
+        if question["id"].startswith("chapter-"):
+            continue
+        world_id = skill_world.get(question["mastery_skill"], "operate-safely")
+        numbers = ranges_by_world[world_id]
+        number = numbers[offsets[world_id] % len(numbers)]
+        offsets[world_id] += 1
+        question_ids_by_mission[f"mission-{number:02d}"].append(question["id"])
     worlds: list[dict[str, Any]] = []
     for world_id, title, numbers, description in WORLD_RANGES:
         missions = []
         for number in numbers:
             chapter = chapter_lookup[number]
-            question_id = questions_by_chapter.get(chapter.identifier, questions[0]["id"])
+            question_ids = question_ids_by_mission[f"mission-{number:02d}"]
             missions.append(
                 {
                     "id": f"mission-{number:02d}",
                     "title": re.sub(r"^Chapter \d+\s+—\s+", "", chapter.title),
                     "chapter": number,
-                    "summary": chapter.content.split("\n\n", 1)[0][:420],
+                    "summary": learning_summary(chapter.content),
                     "citation_id": chapter.identifier,
                     "beats": [
                         {"type": "brief", "title": "Why this matters"},
@@ -464,7 +541,7 @@ def build_worlds(chapters: list[Section], questions: list[dict[str, Any]]) -> li
                         {
                             "type": "recall",
                             "title": "Retrieve from memory",
-                            "question_ids": [question_id],
+                            "question_ids": question_ids,
                         },
                         {"type": "debrief", "title": "Explain and connect"},
                     ],

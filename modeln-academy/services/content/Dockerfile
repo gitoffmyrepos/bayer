@@ -9,8 +9,8 @@ COPY shared/python ./shared/python
 COPY services ./services
 COPY content/dist ./content
 ENV PATH="/app/.venv/bin:${PATH}" \
-    PYTHONPATH="/app/shared/python:/app"
+    PYTHONPATH="/app/shared/python:/app" \
+    PYTHONDONTWRITEBYTECODE="1"
 USER 10001:10001
 EXPOSE 8080
 CMD ["uvicorn", "services.content.app.main:default_app", "--factory", "--host", "0.0.0.0", "--port", "8080"]
-

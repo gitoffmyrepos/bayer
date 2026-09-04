@@ -12,6 +12,7 @@ class AnswerInput(BaseModel):
 
     expected: Any
     submitted: Any
+    kind: str = "objective"
     hints_used: int = Field(default=0, ge=0, le=5)
 
 
@@ -33,6 +34,12 @@ def normalize(value: Any) -> Any:
 
 
 def evaluate_answer(answer: AnswerInput) -> Evaluation:
+    if answer.kind == "teach_back":
+        words = normalize(answer.submitted).split() if isinstance(answer.submitted, str) else []
+        if len(words) < 12:
+            return Evaluation(correct=False, score=0.0)
+        hint_penalty = min(answer.hints_used * 0.1, 0.3)
+        return Evaluation(correct=True, score=round(0.7 - hint_penalty, 2))
     correct = normalize(answer.expected) == normalize(answer.submitted)
     if not correct:
         return Evaluation(correct=False, score=0.0)

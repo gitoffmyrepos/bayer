@@ -23,6 +23,8 @@ class AcademyServices(Protocol):
     def score(self, request: dict[str, Any]) -> dict[str, Any]: ...
     def schedule(self, request: dict[str, Any]) -> dict[str, Any]: ...
     def search(self, query: str, limit: int) -> list[dict[str, Any]]: ...
+    def simulations(self) -> list[dict[str, str]]: ...
+    def reference(self, reference_id: str) -> dict[str, Any] | None: ...
     def start_simulation(self, scenario_id: str) -> dict[str, Any]: ...
     def advance_simulation(self, scenario_id: str, current_state: str, choice_id: str) -> dict[str, Any]: ...
 
@@ -56,6 +58,7 @@ class InProcessServices:
             AnswerInput(
                 expected=question["answer"],
                 submitted=request["submitted"],
+                kind=question["type"],
                 hints_used=request["hints_used"],
             )
         )
@@ -83,6 +86,12 @@ class InProcessServices:
 
     def search(self, query: str, limit: int) -> list[dict[str, Any]]:
         return self._content.search(query, limit)
+
+    def simulations(self) -> list[dict[str, str]]:
+        return self._content.public_simulations()
+
+    def reference(self, reference_id: str) -> dict[str, Any] | None:
+        return self._content.reference(reference_id)
 
     def start_simulation(self, scenario_id: str) -> dict[str, Any]:
         return self._simulator.start(scenario_id)
@@ -155,6 +164,17 @@ class HttpServices:
 
     def search(self, query: str, limit: int) -> list[dict[str, Any]]:
         return list(self._get(f"{self._content_url}/v1/search", params={"q": query, "limit": limit}))
+
+    def simulations(self) -> list[dict[str, str]]:
+        return list(self._get(f"{self._content_url}/v1/simulations"))
+
+    def reference(self, reference_id: str) -> dict[str, Any] | None:
+        try:
+            return dict(self._get(f"{self._content_url}/v1/references/{reference_id}"))
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code == 404:
+                return None
+            raise
 
     def start_simulation(self, scenario_id: str) -> dict[str, Any]:
         return dict(self._post(f"{self._simulation_url}/internal/scenarios/{scenario_id}/start"))

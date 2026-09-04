@@ -25,6 +25,31 @@ def test_hints_reduce_credit_without_hiding_correctness() -> None:
     assert result.score == 0.7
 
 
+def test_teach_back_awards_partial_credit_for_a_substantive_explanation() -> None:
+    result = evaluate_answer(
+        AnswerInput(
+            kind="teach_back",
+            expected="Use the cited rubric.",
+            submitted=(
+                "The source sends the business object across a middleware boundary to the target, "
+                "and I would prove that handoff with the cited runtime evidence."
+            ),
+            hints_used=0,
+        )
+    )
+
+    assert result.correct is True
+    assert result.score == 0.7
+
+
+def test_teach_back_rejects_an_empty_or_shallow_response() -> None:
+    result = evaluate_answer(
+        AnswerInput(kind="teach_back", expected="Use the cited rubric.", submitted="It works.")
+    )
+
+    assert result.correct is False
+
+
 def test_mastery_moves_gradually_and_is_bounded() -> None:
     assert update_mastery(current=40.0, answer_score=1.0, difficulty=3) == 49.0
     assert update_mastery(current=98.0, answer_score=1.0, difficulty=3) == 100.0

@@ -35,7 +35,7 @@ CREATE TABLE IF NOT EXISTS answer_attempts (
     id VARCHAR(36) PRIMARY KEY,
     submission_id VARCHAR(160) NOT NULL UNIQUE,
     user_id VARCHAR(36) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    mission_attempt_id VARCHAR(36) NOT NULL REFERENCES mission_attempts(id) ON DELETE CASCADE,
+    mission_attempt_id VARCHAR(36) REFERENCES mission_attempts(id) ON DELETE CASCADE,
     question_id VARCHAR(160) NOT NULL,
     result JSONB NOT NULL,
     created_at TIMESTAMPTZ NOT NULL
@@ -79,4 +79,3 @@ CREATE TABLE IF NOT EXISTS simulation_runs (
 CREATE INDEX IF NOT EXISTS ix_simulation_runs_user_id ON simulation_runs(user_id);
 
 COMMIT;
-

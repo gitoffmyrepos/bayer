@@ -29,6 +29,22 @@ def test_campaign_has_seven_worlds_and_enough_active_missions(course: dict) -> N
     assert all(len(mission["beats"]) == 5 for mission in missions)
 
 
+def test_each_chapter_mission_contains_a_readable_learning_brief(course: dict) -> None:
+    chapter_missions = [
+        mission
+        for world in course["worlds"]
+        for mission in world["missions"]
+        if mission["id"].startswith("mission-") and mission["id"][8:].isdigit()
+    ]
+
+    assert len(chapter_missions) == 40
+    for mission in chapter_missions:
+        assert len(mission["summary"]) >= 80
+        assert "**" not in mission["summary"]
+        reference = course["references"][mission["citation_id"]]
+        assert len(reference["content"]) >= 200
+
+
 def test_question_bank_is_source_backed_and_varied(course: dict) -> None:
     questions = course["questions"]
     citation_ids = set(course["references"])
@@ -47,6 +63,28 @@ def test_question_bank_is_source_backed_and_varied(course: dict) -> None:
         assert question["explanation"]
         assert question["mastery_skill"]
         assert question["citation_id"] in citation_ids
+
+
+def test_every_question_is_wired_into_a_mission_recall_beat(course: dict) -> None:
+    question_ids = {question["id"] for question in course["questions"]}
+    wired_ids = {
+        question_id
+        for world in course["worlds"]
+        for mission in world["missions"]
+        for beat in mission["beats"]
+        for question_id in beat.get("question_ids", [])
+    }
+
+    assert wired_ids == question_ids
+
+
+def test_structured_questions_provide_interactive_answer_material(course: dict) -> None:
+    for question in course["questions"]:
+        if question["type"] in {"classification", "mapping", "evidence_judgment", "unsafe_assumption"}:
+            assert len(question.get("options", [])) >= 2
+            assert question["answer"] in question["options"]
+        if question["type"] == "ordering":
+            assert set(question["items"]) == set(question["answer"])
 
 
 def test_atlas_covers_primary_inventories(course: dict) -> None:

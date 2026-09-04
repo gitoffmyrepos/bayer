@@ -57,7 +57,9 @@ class AnswerAttempt(Base):
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=identifier)
     submission_id: Mapped[str] = mapped_column(String(160), unique=True, index=True)
     user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
-    mission_attempt_id: Mapped[str] = mapped_column(ForeignKey("mission_attempts.id", ondelete="CASCADE"), index=True)
+    mission_attempt_id: Mapped[str | None] = mapped_column(
+        ForeignKey("mission_attempts.id", ondelete="CASCADE"), index=True, nullable=True
+    )
     question_id: Mapped[str] = mapped_column(String(160), index=True)
     result: Mapped[dict] = mapped_column(JSON)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))

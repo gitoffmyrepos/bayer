@@ -1,0 +1,12 @@
+{
+  "name": "ModelN Systems Adventure",
+  "short_name": "ModelN Academy",
+  "description": "Private interactive ModelN learning academy",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f3f0e8",
+  "theme_color": "#173e35",
+  "icons": [
+    { "src": "/academy-icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

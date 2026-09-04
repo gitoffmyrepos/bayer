@@ -19,7 +19,15 @@ class Database:
     sessions: sessionmaker[OrmSession]
 
 
+def normalize_database_url(url: str) -> str:
+    """Select the bundled psycopg 3 driver for CloudNativePG connection URIs."""
+    if url.startswith("postgresql://"):
+        return url.replace("postgresql://", "postgresql+psycopg://", 1)
+    return url
+
+
 def create_database(url: str, create_schema: bool = True) -> Database:
+    url = normalize_database_url(url)
     connect_args = {"check_same_thread": False} if url.startswith("sqlite") else {}
     engine = create_engine(url, pool_pre_ping=True, connect_args=connect_args)
     database = Database(engine=engine, sessions=sessionmaker(engine, expire_on_commit=False))

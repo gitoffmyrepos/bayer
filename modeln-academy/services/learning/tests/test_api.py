@@ -9,6 +9,7 @@ def test_score_endpoint_returns_idempotent_result() -> None:
         "request_id": "answer-123",
         "question": {
             "id": "q-1",
+            "type": "classification",
             "answer": "configured",
             "explanation": "Configuration is not runtime proof.",
             "difficulty": 2,
