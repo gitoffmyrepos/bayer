@@ -41,9 +41,9 @@ npm run test:e2e
 
 ## Homelab deployment
 
-The GitOps source is `sb-gitops/prod/platform-workloads/manifests/modeln-academy`. Images are immutable Harbor digest references. Argo CD creates the namespace, generated runtime credentials, CloudNativePG database, migration job, five services, network policies, and a Tailscale-only ingress.
+The GitOps source is `sb-gitops/prod/platform-workloads/manifests/modeln-academy`. Images are immutable Harbor digest references. Argo CD creates the namespace, generated runtime credentials, CloudNativePG database, migration job, five services, network policies, and an internal kgateway route.
 
-Access the academy at `https://modeln-academy.tailf15e1.ts.net` while connected to the homelab tailnet. The learner username is `kelvin`. Retrieve the generated password without storing it in Git:
+Access the academy at `https://modeln.strategybase.io` from the homelab network. The learner username is `kelvin`. Retrieve the generated password without storing it in Git:
 
 ```bash
 kubectl --context sb-ha-cluster -n modeln-academy get secret modeln-academy-runtime \
