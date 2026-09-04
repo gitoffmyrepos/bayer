@@ -9,6 +9,7 @@ from fastapi import Depends, FastAPI, Header, HTTPException
 from modeln_academy_shared.models import ServiceHealth
 from pydantic import BaseModel, Field
 
+from .scheduler import ReviewState, schedule_review
 from .scoring import AnswerInput, evaluate_answer, update_mastery
 
 
@@ -38,6 +39,10 @@ class ScoreResponse(BaseModel):
     new_mastery: float
     explanation: str
     citation_id: str
+
+
+class ScheduleRequest(ReviewState):
+    quality: int = Field(ge=0, le=5)
 
 
 def create_app(internal_token: str) -> FastAPI:
@@ -73,6 +78,18 @@ def create_app(internal_token: str) -> FastAPI:
             ),
             explanation=request.question.explanation,
             citation_id=request.question.citation_id,
+        )
+
+    @app.post("/internal/schedule", dependencies=[Depends(require_internal_token)])
+    def schedule(request: ScheduleRequest) -> ReviewState:
+        return schedule_review(
+            ReviewState(
+                repetitions=request.repetitions,
+                interval_days=request.interval_days,
+                ease=request.ease,
+                due_at=request.due_at,
+            ),
+            request.quality,
         )
 
     return app

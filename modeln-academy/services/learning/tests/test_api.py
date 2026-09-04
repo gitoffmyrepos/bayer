@@ -35,3 +35,18 @@ def test_internal_endpoint_rejects_bad_token() -> None:
     response = client.post("/internal/score", json={}, headers={"X-Internal-Token": "wrong"})
 
     assert response.status_code == 403
+
+
+def test_schedule_endpoint_returns_next_due_date() -> None:
+    client = TestClient(create_app("internal-token"))
+
+    response = client.post(
+        "/internal/schedule",
+        headers={"X-Internal-Token": "internal-token"},
+        json={"repetitions": 0, "interval_days": 0, "ease": 2.5, "quality": 5},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["repetitions"] == 1
+    assert response.json()["interval_days"] == 1
+    assert response.json()["due_at"]

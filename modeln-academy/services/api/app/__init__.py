@@ -1,0 +1,1 @@
+"""Academy API application."""
