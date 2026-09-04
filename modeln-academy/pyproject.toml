@@ -1,0 +1,46 @@
+[project]
+name = "modeln-academy"
+version = "0.1.0"
+description = "Private interactive ModelN learning academy"
+requires-python = ">=3.13"
+dependencies = [
+  "argon2-cffi>=23.1.0",
+  "asyncpg>=0.30.0",
+  "fastapi>=0.116.0",
+  "httpx>=0.28.0",
+  "pydantic-settings>=2.10.0",
+  "pyyaml>=6.0.2",
+  "sqlalchemy>=2.0.40",
+  "uvicorn[standard]>=0.35.0",
+]
+
+[dependency-groups]
+dev = [
+  "mypy>=1.17.0",
+  "pytest>=8.4.0",
+  "pytest-asyncio>=1.1.0",
+  "pytest-cov>=6.2.0",
+  "ruff>=0.12.0",
+]
+
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests", "services"]
+pythonpath = ["shared/python", "."]
+addopts = ["--strict-markers", "--disable-warnings"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "UP", "B", "SIM"]
+
+[tool.mypy]
+python_version = "3.13"
+strict = true
+packages = ["modeln_academy_shared"]
+mypy_path = "shared/python"
+
