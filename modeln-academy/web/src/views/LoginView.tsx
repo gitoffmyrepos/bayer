@@ -1,7 +1,18 @@
 import { ArrowRight, Compass, ShieldCheck } from "@phosphor-icons/react";
 import { FormEvent, useState } from "react";
 
-export function LoginView({ onLogin }: { onLogin: (username: string, password: string) => Promise<void> }) {
+import { ThemeSelector } from "../components/ThemeSelector";
+import type { Theme } from "../theme";
+
+export function LoginView({
+  onLogin,
+  theme,
+  onThemeChange,
+}: {
+  onLogin: (username: string, password: string) => Promise<void>;
+  theme: Theme;
+  onThemeChange: (theme: Theme) => void;
+}) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -32,6 +43,7 @@ export function LoginView({ onLogin }: { onLogin: (username: string, password: s
         </div>
       </section>
       <section className="login-card" aria-labelledby="login-heading">
+        <ThemeSelector theme={theme} onChange={onThemeChange} className="login-theme" />
         <ShieldCheck size={30} weight="duotone" />
         <p className="eyebrow">Private homelab access</p>
         <h2 id="login-heading">Enter the academy</h2>

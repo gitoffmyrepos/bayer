@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -51,7 +51,12 @@ function mockSignedInApi() {
   });
 }
 
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => {
+  vi.restoreAllMocks();
+  window.localStorage.clear();
+  document.documentElement.removeAttribute("data-theme");
+  document.documentElement.style.colorScheme = "";
+});
 
 describe("ModelN Systems Adventure", () => {
   it("turns ordering questions into a click-to-build sequence", async () => {
@@ -76,6 +81,33 @@ describe("ModelN Systems Adventure", () => {
     expect(await screen.findByRole("heading", { name: /enter the academy/i })).toBeInTheDocument();
     expect(screen.getByLabelText(/username/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/password/i)).toBeInTheDocument();
+  });
+
+  it("lets an anonymous learner select and persist dark mode", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation(() =>
+      response({ detail: { message: "Sign in to continue." } }, 401),
+    );
+    render(<App />);
+
+    await screen.findByRole("heading", { name: /enter the academy/i });
+    const group = screen.getByRole("group", { name: "Color theme" });
+    const dark = within(group).getByRole("button", { name: "Dark" });
+    await userEvent.click(dark);
+
+    await waitFor(() => expect(dark).toHaveAttribute("aria-pressed", "true"));
+    expect(document.documentElement.dataset.theme).toBe("dark");
+    expect(window.localStorage.getItem("modeln-academy-theme-v1")).toBe("dark");
+  });
+
+  it("keeps theme selection available after sign-in", async () => {
+    mockSignedInApi();
+    render(<App />);
+
+    await waitFor(() => expect(screen.getAllByRole("group", { name: "Color theme" })).toHaveLength(2));
+    const groups = screen.getAllByRole("group", { name: "Color theme" });
+    await userEvent.click(within(groups[0]).getByRole("button", { name: "Light" }));
+
+    expect(document.documentElement.dataset.theme).toBe("light");
   });
 
   it("renders the campaign map and recommended mission", async () => {

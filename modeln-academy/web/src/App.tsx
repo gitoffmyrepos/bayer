@@ -3,6 +3,8 @@ import { useCallback, useEffect, useState } from "react";
 
 import { api, ApiError } from "./api";
 import { ErrorState, LoadingState } from "./components/LoadingState";
+import { ThemeSelector } from "./components/ThemeSelector";
+import { applyTheme, resolveTheme, saveTheme, type Theme } from "./theme";
 import type { Dashboard, Review, SimulationSummary } from "./types";
 import { AtlasView } from "./views/AtlasView";
 import { DashboardView } from "./views/DashboardView";
@@ -14,6 +16,7 @@ import { SimulationView } from "./views/SimulationView";
 type View = "campaign" | "review" | "atlas" | "incident";
 
 export default function App() {
+  const [theme, setTheme] = useState<Theme>(() => resolveTheme());
   const [auth, setAuth] = useState<"loading" | "anonymous" | "authenticated">("loading");
   const [name, setName] = useState("");
   const [view, setView] = useState<View>("campaign");
@@ -39,7 +42,13 @@ export default function App() {
     }
   }, []);
 
+  useEffect(() => { applyTheme(theme); }, [theme]);
   useEffect(() => { void loadAcademy(); }, [loadAcademy]);
+
+  function chooseTheme(nextTheme: Theme) {
+    setTheme(nextTheme);
+    saveTheme(nextTheme);
+  }
 
   async function login(username: string, password: string) {
     await api.login(username, password);
@@ -53,11 +62,13 @@ export default function App() {
     setMissionId(null);
   }
 
-  if (auth === "loading") return <LoadingState />;
-  if (auth === "anonymous") return <LoginView onLogin={login} />;
-  if (error && !dashboard) return <ErrorState message={error} retry={() => void loadAcademy()} />;
-  if (missionId) return <MissionView missionId={missionId} onClose={() => setMissionId(null)} onComplete={() => void loadAcademy()} />;
-  if (!dashboard) return <LoadingState />;
+  const standaloneTheme = <ThemeSelector theme={theme} onChange={chooseTheme} className="standalone-theme__control" />;
+
+  if (auth === "loading") return <div className="standalone-view"><div className="standalone-theme">{standaloneTheme}</div><LoadingState /></div>;
+  if (auth === "anonymous") return <LoginView onLogin={login} theme={theme} onThemeChange={chooseTheme} />;
+  if (error && !dashboard) return <div className="standalone-view"><div className="standalone-theme">{standaloneTheme}</div><ErrorState message={error} retry={() => void loadAcademy()} /></div>;
+  if (missionId) return <div className="standalone-view"><div className="standalone-theme">{standaloneTheme}</div><MissionView missionId={missionId} onClose={() => setMissionId(null)} onComplete={() => void loadAcademy()} /></div>;
+  if (!dashboard) return <div className="standalone-view"><div className="standalone-theme">{standaloneTheme}</div><LoadingState /></div>;
 
   const navItems = [
     { id: "campaign" as const, label: "Campaign", icon: House },
@@ -73,9 +84,11 @@ export default function App() {
         <nav aria-label="Academy sections">
           {navItems.map((item) => { const Icon = item.icon; return <button key={item.id} className={view === item.id ? "nav-button nav-button--active" : "nav-button"} onClick={() => setView(item.id)}><Icon size={21} weight={view === item.id ? "fill" : "regular"} /><span>{item.label}</span>{item.id === "review" && reviews.length > 0 && <b>{reviews.length}</b>}</button>; })}
         </nav>
+        <ThemeSelector theme={theme} onChange={chooseTheme} className="sidebar-theme" />
         <div className="sidebar-profile"><span>{name.slice(0, 1).toUpperCase()}</span><div><strong>{name}</strong><small>Private learner</small></div><button aria-label="Sign out" onClick={() => void logout()}><DoorOpen size={19} /></button></div>
       </aside>
       <main className="app-content">
+        <ThemeSelector theme={theme} onChange={chooseTheme} className="content-theme" />
         {view === "campaign" && <DashboardView data={dashboard} reviews={reviews.length} onMission={(mission) => setMissionId(mission.id)} />}
         {view === "review" && <ReviewView initialReviews={reviews} />}
         {view === "atlas" && <AtlasView />}
