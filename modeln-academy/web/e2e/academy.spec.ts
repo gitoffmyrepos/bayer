@@ -28,6 +28,33 @@ test("learner can enter, explore a mission, and use the evidence atlas", async (
   await expect(page.getByText(/FGI 205/).first()).toBeVisible();
 });
 
+test("theme selection persists across a signed-in reload", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.goto("/");
+
+  const loginTheme = page.getByRole("group", { name: "Color theme" });
+  await expect(loginTheme).toBeVisible();
+  await loginTheme.getByRole("button", { name: "Dark" }).click();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+
+  await page.getByLabel("Username").fill("kelvin");
+  await page.getByLabel("Password").fill(learnerPassword);
+  await page.getByRole("button", { name: "Start learning" }).click();
+  await expect(page.getByRole("heading", { name: "Systems Adventure" })).toBeVisible();
+
+  const academyTheme = page.getByRole("group", { name: "Color theme" }).filter({ visible: true });
+  await expect(academyTheme).toBeVisible();
+  await expect(academyTheme.getByRole("button", { name: "Dark" })).toHaveAttribute("aria-pressed", "true");
+
+  await page.reload();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+  await expect(page.getByRole("heading", { name: "Systems Adventure" })).toBeVisible();
+  await expect(page.getByRole("group", { name: "Color theme" }).filter({ visible: true }).getByRole("button", { name: "Dark" })).toHaveAttribute("aria-pressed", "true");
+
+  await page.getByRole("group", { name: "Color theme" }).filter({ visible: true }).getByRole("button", { name: "Light" }).click();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+});
+
 test("campaign remains usable at a phone viewport", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/");
@@ -37,5 +64,6 @@ test("campaign remains usable at a phone viewport", async ({ page }) => {
 
   await expect(page.getByRole("heading", { name: "Systems Adventure" })).toBeVisible();
   await expect(page.getByLabel("Academy sections").last()).toBeVisible();
+  await expect(page.getByRole("group", { name: "Color theme" }).filter({ visible: true })).toBeVisible();
   await page.screenshot({ path: "artifacts/dashboard-mobile.png", fullPage: true });
 });
