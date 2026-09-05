@@ -166,7 +166,7 @@ An answer updates mastery based on correctness, question difficulty, hint use, a
 ## Security and Privacy
 
 - Deploy in a dedicated `modeln-academy` namespace.
-- Expose only through a private Tailscale ingress or an equivalently private homelab route; do not create a public DNS route.
+- Expose only through the existing internal homelab kgateway at `modeln.strategybase.io`; do not add Tailscale or a public route.
 - Use strong password hashes, rotating server-side sessions, secure HTTP-only cookies, CSRF protection, rate limits, and logout/revocation.
 - Store secrets through the homelab's approved secret mechanism; never commit credentials.
 - Run containers as numeric non-root users with read-only root filesystems, dropped Linux capabilities, runtime-default seccomp, resource limits, and explicit writable temporary volumes.
@@ -176,7 +176,7 @@ An answer updates mastery based on correctness, question difficulty, hint use, a
 
 ## Kubernetes and Delivery
 
-Application images are multi-stage, multi-architecture builds published to private Harbor with immutable tags and digests. GitHub Actions/Argo Workflows build and scan images. `sb-gitops` owns namespace, CNPG, services, deployments, private ingress, policies, secrets references, disruption budgets, and monitoring rules. Argo CD reconciles the application; live `kubectl` patches are prohibited.
+Application images are multi-stage, multi-architecture builds published to private Harbor with immutable tags and digests. GitHub Actions/Argo Workflows build and scan images. `sb-gitops` owns namespace, CNPG, services, deployments, internal Gateway API routes, policies, secrets references, disruption budgets, and monitoring rules. Argo CD reconciles the application; live `kubectl` patches are prohibited.
 
 The deployment supports rolling updates for stateless services. Database migrations run as a pre-deploy job and are backward compatible for one application version. Content bundles publish independently and activate only after validation.
 
@@ -213,7 +213,7 @@ The deployment supports rolling updates for stateless services. Database migrati
 ### Runtime acceptance
 
 - All workloads are healthy in `sb-ha-cluster`
-- The private endpoint is reachable from the Tailnet and not exposed through the public gateway
+- The endpoint is reachable through the internal kgateway at `modeln.strategybase.io` and is not publicly routed
 - PostgreSQL persistence survives pod replacement
 - Progress synchronizes between two independent browser sessions
 - Network policies, probes, resource constraints, backups, metrics, and logs are verified
